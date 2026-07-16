@@ -2,6 +2,14 @@ name = "highphone"
 main = "worker/index.ts"
 compatibility_date = "2025-01-01"
 
+# Custom domains (zones must be active on Cloudflare). Deploying provisions the
+# SSL certs and DNS records automatically.
+routes = [
+  { pattern = "highphone.app", custom_domain = true },
+  { pattern = "www.highphone.app", custom_domain = true },
+  { pattern = "highph.one", custom_domain = true },
+]
+
 # Serve the exported static site (`next build` -> ./out) and fall through to the
 # Worker for /api/* requests.
 [assets]
