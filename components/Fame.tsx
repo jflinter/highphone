@@ -1,6 +1,7 @@
 import { heightFromSeconds } from '@/lib/heightFromSeconds';
-import { LeaderboardEntry, fetchScores, supabase } from '@/lib/supabaseClient';
+import { LeaderboardEntry, fetchScores } from '@/lib/api';
 import { usePlayerInfo } from '@/lib/usePlayerInfo';
+import { isProfane } from '@/lib/profanity';
 import classNames from 'classnames';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -50,10 +51,19 @@ export default function Fame({ onBack }: Props) {
   const [timeWindow, setTimeWindow] = useState<'daily' | 'all-time'>('daily');
   useEffect(() => {
     const timeout = setTimeout(() => {
-      fetchScores(mode === 'case', timeWindow === 'daily').then(setLeaderboard);
+      fetchScores(mode === 'case', timeWindow === 'daily').then((entries) => {
+        // Shadowban: hide entries with profane names from everyone except
+        // their own owner, so offenders don't realize they've been filtered.
+        setLeaderboard(
+          entries.filter(
+            (entry) =>
+              !isProfane(entry.name) || entry.playerId === playerInfo?.playerId
+          )
+        );
+      });
     });
     return () => clearTimeout(timeout);
-  }, [mode, timeWindow]);
+  }, [mode, timeWindow, playerInfo?.playerId]);
 
   return (
     <main className={`flex w-full flex-col items-center`}>

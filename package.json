@@ -5,12 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "preview": "next build && wrangler dev",
+    "deploy": "next build && wrangler deploy",
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.13",
-    "@supabase/supabase-js": "^2.21.0",
     "@tailwindcss/forms": "^0.5.3",
     "@types/node": "18.15.13",
     "@types/react": "18.0.38",
@@ -21,6 +22,7 @@
     "eslint": "8.39.0",
     "eslint-config-next": "13.3.1",
     "next": "13.3.1",
+    "obscenity": "^0.4.6",
     "postcss": "8.4.23",
     "react": "18.2.0",
     "react-confetti": "^6.1.0",
@@ -28,5 +30,9 @@
     "recharts": "^2.5.0",
     "tailwindcss": "3.3.1",
     "typescript": "5.0.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260716.1",
+    "wrangler": "^4.111.0"
   }
 }
