@@ -83,16 +83,30 @@ const handleApi = async (
       durationMs: number;
       hasCase: boolean;
     };
+    // Validate — reject garbage/spam, but with bounds far outside any real
+    // throw (real airtime is < ~3.5s) so a legitimate score is never rejected.
+    const durationMs = Math.round(Number(body.durationMs));
+    if (
+      typeof body.playerId !== 'string' ||
+      body.playerId.length === 0 ||
+      !Number.isFinite(durationMs) ||
+      durationMs <= 0 ||
+      durationMs > 60000
+    ) {
+      return json({ error: 'invalid score' }, 400);
+    }
+    const playerName = String(body.playerName ?? '').slice(0, 200);
+    const localId = String(body.localId ?? '').slice(0, 100);
     const createdAt = new Date().toISOString();
     const inserted = await env.DB.prepare(
       `INSERT INTO scores (local_id, player_id, player_name, duration_ms, has_case, created_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING id`
     )
       .bind(
-        body.localId,
+        localId,
         body.playerId,
-        body.playerName,
-        Math.round(body.durationMs),
+        playerName,
+        durationMs,
         body.hasCase ? 1 : 0,
         createdAt
       )
@@ -137,11 +151,23 @@ const handleApi = async (
   // POST /api/videos?throwId= — store the journey video in R2.
   if (pathname === '/api/videos' && request.method === 'POST') {
     const throwId = url.searchParams.get('throwId');
-    if (!throwId || !request.body) return json({ error: 'bad request' }, 400);
+    const contentType = request.headers.get('content-type') ?? '';
+    const contentLength = Number(request.headers.get('content-length') ?? '0');
+    const MAX_BYTES = 30 * 1024 * 1024; // journeys are a few seconds of low-res video
+    // throwId becomes the R2 key, so constrain it to UUID-ish characters.
+    if (!throwId || !/^[a-zA-Z0-9-]{1,64}$/.test(throwId) || !request.body) {
+      return json({ error: 'bad request' }, 400);
+    }
+    if (!contentType.startsWith('video/')) {
+      return json({ error: 'unsupported media type' }, 415);
+    }
+    // Best-effort size cap via declared length (Cloudflare also enforces a
+    // platform body limit); blocks casual oversized uploads.
+    if (contentLength > MAX_BYTES) {
+      return json({ error: 'payload too large' }, 413);
+    }
     await env.VIDEOS.put(`${throwId}.mp4`, request.body, {
-      httpMetadata: {
-        contentType: request.headers.get('content-type') ?? 'video/mp4',
-      },
+      httpMetadata: { contentType },
     });
     return json({ ok: true });
   }

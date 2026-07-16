@@ -1,14 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-  Scatter,
-  ScatterChart,
-  Tooltip,
-  ReferenceLine,
-} from 'recharts';
 import { Switch } from '@/components/Switch';
 import Confetti from 'react-confetti';
 import useMediaRecorder from '@/components/useMediaRecorder';
@@ -272,7 +262,6 @@ const Game = ({ playerInfo }: GameProps) => {
   const [mode, setMode] = useState<'fame' | 'game' | 'info'>('game');
   const [lastThrow, setLastThrow] = useState<Throw | null>(null);
   const [dailyIndex, setDailyIndex] = useState<number | null>(null);
-  const [showGraphs, setShowGraphs] = useState(false);
   const [recordVideo, setRecordVideo] = useState(false);
   const { stopRecording, getMediaStream, startRecording } = useMediaRecorder({
     recordScreen: false,
@@ -287,7 +276,6 @@ const Game = ({ playerInfo }: GameProps) => {
       },
     },
     onStop: async (blob) => {
-      // const truncated = await truncateVideo(blob, 3)
       setVideoBlob(blob);
     },
     onError: (error) => {
@@ -536,44 +524,6 @@ const Game = ({ playerInfo }: GameProps) => {
                       loop
                     />
                   </div>
-                )}
-                {/* <Button
-              text={showGraphs ? 'Hide debug data 🤓' : 'Show debug data 🤓'}
-              onClick={() => setShowGraphs(!showGraphs)}
-            /> */}
-                {showGraphs && (
-                  <ResponsiveContainer width="100%" height={400}>
-                    <ScatterChart margin={{ left: 20 }}>
-                      <CartesianGrid />
-                      <XAxis type="number" dataKey="x" name="time" unit="s" />
-                      <YAxis
-                        type="number"
-                        dataKey="y"
-                        name="acceleration"
-                        unit="m/s^2"
-                      />
-                      <ReferenceLine
-                        x={lastThrow.acceleratingIndex / 60.0}
-                        stroke="yellow"
-                      />
-                      <ReferenceLine
-                        x={lastThrow.inFlightIndex / 60.0}
-                        stroke="red"
-                      />
-                      <ReferenceLine
-                        x={lastThrow.completeIndex / 60.0}
-                        stroke="green"
-                      />
-                      <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-                      <Scatter
-                        data={lastThrow.accelerationData.map((a, t) => ({
-                          x: t / 60,
-                          y: a,
-                        }))}
-                        fill="#8884d8"
-                      />
-                    </ScatterChart>
-                  </ResponsiveContainer>
                 )}
               </div>
             </div>

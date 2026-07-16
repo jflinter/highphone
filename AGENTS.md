@@ -120,7 +120,14 @@ pnpm preview   # next build + `wrangler dev`: full app incl. the Worker/API
 pnpm build     # static export to ./out
 pnpm deploy    # next build + `wrangler deploy`
 pnpm lint
+pnpm test      # vitest: characterization tests for the pure functions
 ```
+
+`pnpm test` currently locks `heightFromSeconds`, `speedFromSeconds`, and the
+profanity filter. **`detectThrow` is NOT yet covered** — it lives unexported in
+`pages/index.tsx`. Covering it (extract to `lib/`, add golden tests from a
+captured real acceleration trace) is the safest way to make future changes near
+the core verifiable; do that before touching detection.
 
 For anything touching the API/leaderboard, use `pnpm preview` (real Worker +
 local D1), not `pnpm dev`. D1 can be seeded locally with
