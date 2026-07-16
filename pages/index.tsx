@@ -18,7 +18,7 @@ import {
   createScore,
   fetchHighScore,
   uploadVideo,
-} from '@/lib/supabaseClient';
+} from '@/lib/api';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { PlayerInfo, usePlayerInfo } from '@/lib/usePlayerInfo';

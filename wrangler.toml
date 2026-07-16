@@ -1,0 +1,20 @@
+name = "highphone"
+main = "worker/index.ts"
+compatibility_date = "2025-01-01"
+
+# Serve the exported static site (`next build` -> ./out) and fall through to the
+# Worker for /api/* requests.
+[assets]
+directory = "./out"
+binding = "ASSETS"
+
+# Leaderboard database. Fill in database_id after `wrangler d1 create highphone`.
+[[d1_databases]]
+binding = "DB"
+database_name = "highphone"
+database_id = "8619942e-7a17-4e1d-abe7-e89a8e30170b"
+
+# Journey videos. Create with `wrangler r2 bucket create highphone-journeys`.
+[[r2_buckets]]
+binding = "VIDEOS"
+bucket_name = "highphone-journeys"

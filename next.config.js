@@ -1,32 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  async headers() {
-    return [
-      {
-        source: '/(.*)',
-        headers: [
-          {
-            key: 'Cross-Origin-Embedder-Policy',
-            value: 'require-corp',
-          },
-          {
-            key: 'Cross-Origin-Opener-Policy',
-            value: 'same-origin',
-          },
-        ],
-      },
-      {
-        source: '/hi',
-        headers: [
-          {
-            key: 'x-robots-tag',
-            value: 'noindex',
-          },
-        ],
-      },
-    ];
-  },
+  // Static export: the app is 100% client-rendered, so we ship it as plain
+  // static files served by the Cloudflare Worker (see wrangler.toml). Output
+  // goes to ./out.
+  output: 'export',
 };
 
 module.exports = nextConfig;

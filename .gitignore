@@ -30,6 +30,13 @@ yarn-error.log*
 # vercel
 .vercel
 
+# cloudflare
+.wrangler
+journeys-export/
+
+# one-time data export artifacts (regenerable via scripts/, contain user data)
+migrations/*_seed.sql
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
