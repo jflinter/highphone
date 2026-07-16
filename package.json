@@ -2,6 +2,7 @@
   "name": "highphone",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.28.1",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -34,5 +35,8 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260716.1",
     "wrangler": "^4.111.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp", "workerd"]
   }
 }

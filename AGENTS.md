@@ -113,18 +113,24 @@ a shadowban. Nothing is blocked at name entry and no data is scrubbed.
 
 ## Development
 
+Package manager is **pnpm** (pinned via `packageManager` in package.json).
+
 ```bash
-yarn install
-yarn dev       # Next dev server (UI only — /api is not available here)
-yarn preview   # next build + `wrangler dev`: full app incl. the Worker/API
-yarn build     # static export to ./out
-yarn deploy    # next build + `wrangler deploy`
-yarn lint
+pnpm install
+pnpm dev       # Next dev server (UI only — /api is not available here)
+pnpm preview   # next build + `wrangler dev`: full app incl. the Worker/API
+pnpm build     # static export to ./out
+pnpm deploy    # next build + `wrangler deploy`
+pnpm lint
 ```
 
-For anything touching the API/leaderboard, use `yarn preview` (real Worker +
-local D1), not `yarn dev`. D1 can be seeded locally with
-`wrangler d1 execute highphone --local --file migrations/0001_init.sql`.
+For anything touching the API/leaderboard, use `pnpm preview` (real Worker +
+local D1), not `pnpm dev`. D1 can be seeded locally with
+`pnpm exec wrangler d1 execute highphone --local --file migrations/0001_init.sql`.
+
+Note: pnpm blocks postinstall scripts by default; the build scripts wrangler
+needs (`esbuild`, `workerd`) are allow-listed under `pnpm.onlyBuiltDependencies`
+in package.json.
 
 **You cannot actually play the game on a desktop dev machine** — it requires an
 iPhone's motion sensors, and `IPhoneOnly` shows a fallback message elsewhere. UI
