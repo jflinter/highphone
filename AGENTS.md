@@ -64,9 +64,8 @@ entry, video capture/upload) is **fair game** to change.
   `/api/*`. Data is in **D1** (SQLite); journey videos are in **R2**.
   Everything runs on Cloudflare's free tier with git-push deploys.
 
-  > Migrated off Supabase + Vercel. If you find references to Supabase, they're
-  > stale — the only remaining Supabase touchpoints are the one-shot export
-  > scripts in `scripts/`.
+  > Migrated off Supabase + Vercel (both since deleted). Any lingering
+  > references to Supabase are stale.
 
 ### Data model (D1)
 
@@ -107,8 +106,7 @@ a shadowban. Nothing is blocked at name entry and no data is scrubbed.
 | `components/IPhoneOnly.tsx` | Gates the whole app to iPhone user agents. |
 | `worker/index.ts` | Cloudflare Worker: serves static assets + `/api/*` (D1 + R2). |
 | `wrangler.toml` | Worker config (assets dir, D1, R2 bindings). |
-| `migrations/*.sql` | D1 schema (`0001_init.sql`) and exported seed data. |
-| `scripts/export-*.mjs` | One-shot Supabase → D1/R2 export helpers. |
+| `migrations/0001_init.sql` | D1 schema. |
 | `next.config.js` | Enables static export. |
 
 ## Development
