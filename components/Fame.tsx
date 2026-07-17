@@ -45,11 +45,13 @@ const SegmentedControl = ({
 export default function Fame({ onBack }: Props) {
   const { playerInfo } = usePlayerInfo();
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<'case' | 'no-case'>(
     playerInfo?.hasCase ? 'case' : 'no-case'
   );
   const [timeWindow, setTimeWindow] = useState<'daily' | 'all-time'>('daily');
   useEffect(() => {
+    setLoading(true);
     const timeout = setTimeout(() => {
       fetchScores(mode === 'case', timeWindow === 'daily').then((entries) => {
         // Shadowban: hide entries with profane names from everyone except
@@ -60,6 +62,7 @@ export default function Fame({ onBack }: Props) {
               !isProfane(entry.name) || entry.playerId === playerInfo?.playerId
           )
         );
+        setLoading(false);
       });
     });
     return () => clearTimeout(timeout);
@@ -116,18 +119,25 @@ export default function Fame({ onBack }: Props) {
           </div>
         </div>
       </div>
-      {leaderboard.map((entry, i) => (
-        <div
-          key={entry.id}
-          className={classNames({
-            'text-blue-600': entry.playerId === playerInfo?.playerId,
-          })}
-        >
-          {i + 1}. {entry.name} -{' '}
-          {heightFromSeconds(entry.durationMs / 1000).toFixed(1)}ft,{' '}
-          {entry.date.toLocaleDateString()}
+      {!loading && leaderboard.length === 0 ? (
+        <div className="text-md text-center font-normal text-gray-600 px-6">
+          Noone is on the leaderboard yet today. Immortality is yours for the
+          taking!
         </div>
-      ))}
+      ) : (
+        leaderboard.map((entry, i) => (
+          <div
+            key={entry.id}
+            className={classNames({
+              'text-blue-600': entry.playerId === playerInfo?.playerId,
+            })}
+          >
+            {i + 1}. {entry.name} -{' '}
+            {heightFromSeconds(entry.durationMs / 1000).toFixed(1)}ft,{' '}
+            {entry.date.toLocaleDateString()}
+          </div>
+        ))
+      )}
     </main>
   );
 }
