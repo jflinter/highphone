@@ -148,6 +148,69 @@ const handleApi = async (
     return json(row ?? null);
   }
 
+  // Capture sessions — the /capture data-collection tool (pages/capture.tsx).
+  // Each POST is one recorded gesture: raw sensor streams + a text note, used
+  // to build fixtures for the (otherwise untestable) throw detector.
+  //
+  // POST /api/captures — store a capture session.
+  if (pathname === '/api/captures' && request.method === 'POST') {
+    const body = (await request.json()) as {
+      notes?: unknown;
+      data?: unknown;
+      detected?: unknown;
+      durationMs?: unknown;
+      sampleCount?: unknown;
+    };
+    // `data` is the raw sensor JSON, already stringified by the client.
+    if (typeof body.data !== 'string' || body.data.length === 0) {
+      return json({ error: 'missing data' }, 400);
+    }
+    // A per-throw trace is only tens–hundreds of KB; cap well above that but
+    // low enough to block abuse of this unauthenticated endpoint.
+    const MAX_DATA_BYTES = 8 * 1024 * 1024;
+    if (body.data.length > MAX_DATA_BYTES) {
+      return json({ error: 'payload too large' }, 413);
+    }
+    const notes = String(body.notes ?? '').slice(0, 2000);
+    const toIntOrNull = (v: unknown): number | null => {
+      const n = Math.round(Number(v));
+      return Number.isFinite(n) ? n : null;
+    };
+    const detected = body.detected ? 1 : 0;
+    const durationMs = toIntOrNull(body.durationMs);
+    const sampleCount = toIntOrNull(body.sampleCount);
+    const createdAt = new Date().toISOString();
+    const inserted = await env.DB.prepare(
+      `INSERT INTO capture_sessions (notes, data, detected, duration_ms, sample_count, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING id`
+    )
+      .bind(notes, body.data, detected, durationMs, sampleCount, createdAt)
+      .first<{ id: number | string }>();
+    return json({ id: inserted?.id ?? null });
+  }
+
+  // GET /api/captures — list session metadata (newest first). With ?id=<n>,
+  // return that single row including the full raw `data` blob for replay.
+  if (pathname === '/api/captures' && request.method === 'GET') {
+    const idParam = url.searchParams.get('id');
+    if (idParam !== null) {
+      const id = Math.round(Number(idParam));
+      if (!Number.isFinite(id)) return json({ error: 'bad id' }, 400);
+      const row = await env.DB.prepare(
+        `SELECT id, notes, data, detected, duration_ms, sample_count, created_at
+         FROM capture_sessions WHERE id = ?1`
+      )
+        .bind(id)
+        .first();
+      return json(row ?? null);
+    }
+    const rows = await env.DB.prepare(
+      `SELECT id, notes, detected, duration_ms, sample_count, created_at
+       FROM capture_sessions ORDER BY created_at DESC LIMIT 200`
+    ).all();
+    return json(rows.results ?? []);
+  }
+
   // POST /api/videos?throwId= — store the journey video in R2.
   if (pathname === '/api/videos' && request.method === 'POST') {
     const throwId = url.searchParams.get('throwId');

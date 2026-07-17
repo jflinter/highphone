@@ -33,7 +33,8 @@ human first**, and never change observable behavior.
 
 ### Exactly which code is "core game logic" (frozen)
 
-- **`pages/index.tsx`**
+- **`lib/detectThrow.ts`** (relocated verbatim from `pages/index.tsx` so both the
+  game and the `/capture` tool can import it — the *logic is unchanged*)
   - `handleMotionRosettaCode()` — rotates raw acceleration into a world frame
     using the gravity vector so "up" is consistent regardless of phone
     orientation.
@@ -42,6 +43,7 @@ human first**, and never change observable behavior.
     constant here matters: `threshold = 8`, the `< -3` and `< -5` checks, the
     `22`- and `30`-frame windows, the `10`-frame trims, `/ 60` (60 Hz sampling),
     the rotation-diff math.
+- **`pages/index.tsx`**
   - The `motionListener` / `orientationListener` and their setup inside the big
     `useEffect` — including `windowSizeSeconds = 3.5`, `zAccel =
     rotatedAcceleration[2] * -1`, and the `totalHeight > 1.5` minimum-throw gate.
@@ -80,6 +82,12 @@ entry, video capture/upload) is **fair game** to change.
   day) — matching the original view.
 - **R2 bucket** (`VIDEOS` binding) — uploaded `.mp4` "journey" videos, keyed by
   `<throwId>.mp4`. Not read back by the app currently, only written.
+- Table **`capture_sessions`** — one row per recorded gesture from the `/capture`
+  tool: `id`, `notes` (free-text annotation), `data` (JSON string: raw
+  `devicemotion`/`deviceorientation` streams), `detected` (0/1, did the real
+  detector fire — client-computed), `duration_ms`, `sample_count`, `created_at`.
+  See `migrations/0002_capture_sessions.sql`. This is the fixture store for the
+  frozen detector — real traces to eventually build golden tests from.
 
 Note: height/speed shown on the leaderboard are computed **client-side** from
 the stored `duration_ms` via `heightFromSeconds`; the DB only stores durations.
@@ -95,7 +103,9 @@ a shadowban. Nothing is blocked at name entry and no data is scrubbed.
 
 | File | Role |
 | --- | --- |
-| `pages/index.tsx` | Everything: name entry (`Welcome`), the game + sensor loop (`Game`), and the frozen detection logic. |
+| `pages/index.tsx` | Name entry (`Welcome`) and the game + sensor loop (`Game`). Imports the frozen detector from `lib/detectThrow.ts`. |
+| `lib/detectThrow.ts` | Frozen detection logic: `detectThrow` + `handleMotionRosettaCode` (+ `Orientation`/`Throw`/`Vec3` types). |
+| `pages/capture.tsx` | Private (`/capture`, noindex, unlinked) tool to record raw sensor traces + notes as detector fixtures. |
 | `pages/fame.tsx`, `components/Fame.tsx` | Leaderboard UI. |
 | `pages/hi.tsx`, `components/Info.tsx` | "About / contact" page (noindexed). |
 | `lib/api.ts` | Data layer: `fetch`es the Worker's `/api/*`. Same-origin. |
@@ -106,7 +116,7 @@ a shadowban. Nothing is blocked at name entry and no data is scrubbed.
 | `components/IPhoneOnly.tsx` | Gates the whole app to iPhone user agents. |
 | `worker/index.ts` | Cloudflare Worker: serves static assets + `/api/*` (D1 + R2). |
 | `wrangler.toml` | Worker config (assets dir, D1, R2 bindings). |
-| `migrations/0001_init.sql` | D1 schema. |
+| `migrations/*.sql` | D1 schema: `0001_init.sql` (scores), `0002_capture_sessions.sql` (capture fixtures). |
 | `next.config.js` | Enables static export. |
 
 ## Development
@@ -124,10 +134,11 @@ pnpm test      # vitest: characterization tests for the pure functions
 ```
 
 `pnpm test` currently locks `heightFromSeconds`, `speedFromSeconds`, and the
-profanity filter. **`detectThrow` is NOT yet covered** — it lives unexported in
-`pages/index.tsx`. Covering it (extract to `lib/`, add golden tests from a
-captured real acceleration trace) is the safest way to make future changes near
-the core verifiable; do that before touching detection.
+profanity filter. **`detectThrow` is NOT yet covered.** It now lives (exported)
+in `lib/detectThrow.ts`, so it is finally importable by a test. The remaining
+step is golden tests from captured real acceleration traces — use the `/capture`
+tool to collect them (rows land in the `capture_sessions` D1 table). Do that
+before touching detection.
 
 For anything touching the API/leaderboard, use `pnpm preview` (real Worker +
 local D1), not `pnpm dev`. D1 can be seeded locally with

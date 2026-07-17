@@ -23,6 +23,25 @@ export type VideoRequest = {
   video: File;
 };
 
+// A recorded gesture from the /capture tool. `data` is the raw sensor JSON,
+// already stringified by the caller; the rest are client-computed metadata.
+export type CaptureRequest = {
+  notes: string;
+  data: string;
+  detected: boolean;
+  durationMs: number | null;
+  sampleCount: number;
+};
+
+export type CaptureSummary = {
+  id: number;
+  notes: string | null;
+  detected: number | null;
+  duration_ms: number | null;
+  sample_count: number | null;
+  created_at: string;
+};
+
 type LeaderboardRow = {
   id: string;
   player_name: string;
@@ -94,6 +113,35 @@ export const fetchScores = async (
     if (!res.ok) return [];
     const rows = (await res.json()) as LeaderboardRow[];
     return rows.map(rowToEntry);
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
+};
+
+export const createCapture = async (
+  capture: CaptureRequest
+): Promise<number | null> => {
+  try {
+    const res = await fetch('/api/captures', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(capture),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { id: number | null };
+    return data.id;
+  } catch (e) {
+    console.error(e);
+    return null;
+  }
+};
+
+export const fetchCaptures = async (): Promise<CaptureSummary[]> => {
+  try {
+    const res = await fetch('/api/captures');
+    if (!res.ok) return [];
+    return (await res.json()) as CaptureSummary[];
   } catch (e) {
     console.error(e);
     return [];
