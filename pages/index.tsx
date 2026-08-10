@@ -23,6 +23,7 @@ import Fame from '@/components/Fame';
 import Info from '@/components/Info';
 import IPhoneOnly from '@/components/IPhoneOnly';
 import { speedFromSeconds } from '@/lib/speedFromSeconds';
+import { useWakeLock } from '@/lib/useWakeLock';
 
 interface DeviceMotionEventiOS extends DeviceMotionEvent {
   requestPermission?: () => Promise<'granted' | 'denied'>;
@@ -79,6 +80,9 @@ const Game = ({ playerInfo }: GameProps) => {
   const [lastThrow, setLastThrow] = useState<Throw | null>(null);
   const [dailyIndex, setDailyIndex] = useState<number | null>(null);
   const [recordVideo, setRecordVideo] = useState(false);
+  // Don't let the idle timer lock the phone mid-throw — a lock suspends the
+  // page and kills the sensor stream. Independent of the detection logic below.
+  useWakeLock();
   const { stopRecording, getMediaStream, startRecording } = useMediaRecorder({
     recordScreen: false,
     blobOptions: { type: 'video/mp4' },

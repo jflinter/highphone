@@ -21,6 +21,7 @@ import {
   type Vec3,
 } from '@/lib/detectThrow';
 import { CaptureSummary, createCapture, fetchCaptures } from '@/lib/api';
+import { useWakeLock } from '@/lib/useWakeLock';
 
 interface DeviceMotionEventiOS extends DeviceMotionEvent {
   requestPermission?: () => Promise<'granted' | 'denied'>;
@@ -32,6 +33,15 @@ interface DeviceOrientationEventiOS extends DeviceOrientationEvent {
 // Raw, unrounded samples — a strict superset of what the game keeps (it stores
 // only the derived zAccel scalar). Timestamps + interval let a replay reproduce
 // the game bit-for-bit and let us finally check the hard-coded 60Hz assumption.
+//
+// ax/ay/az = event.acceleration (gravity removed)
+// gx/gy/gz = event.accelerationIncludingGravity
+// ra/rb/rg = event.rotationRate alpha/beta/gamma, in deg/s
+//
+// rotationRate is recorded but NOT fed to the detector — it's the missing
+// signal for telling "the phone is spinning" apart from "the phone is
+// accelerating". Captured throws show 24-29g at the release, and that reads as
+// a landing to detectThrow; only the gyro can distinguish the two.
 type MotionSample = {
   t: number;
   interval: number;
@@ -41,6 +51,9 @@ type MotionSample = {
   gx: number | null;
   gy: number | null;
   gz: number | null;
+  ra: number | null;
+  rb: number | null;
+  rg: number | null;
 };
 type OrientationSample = {
   t: number;
@@ -82,6 +95,9 @@ const Button = ({
 type Phase = 'idle' | 'recording' | 'stopped';
 
 function Capture() {
+  // A screen lock suspends the page and silently truncates the trace (see
+  // session #5). Hold a wake lock for the whole session.
+  useWakeLock();
   const [phase, setPhase] = useState<Phase>('idle');
   const [sampleCount, setSampleCount] = useState(0);
   const [verdict, setVerdict] = useState<Throw | null>(null);
@@ -198,6 +214,9 @@ function Capture() {
         gx: event.accelerationIncludingGravity?.x ?? null,
         gy: event.accelerationIncludingGravity?.y ?? null,
         gz: event.accelerationIncludingGravity?.z ?? null,
+        ra: event.rotationRate?.alpha ?? null,
+        rb: event.rotationRate?.beta ?? null,
+        rg: event.rotationRate?.gamma ?? null,
       });
 
       // Detection mirror — identical to the game's motionListener pipeline.
@@ -250,10 +269,13 @@ function Capture() {
     setSubmitting(true);
     setError(null);
     const detection = firstDetectionRef.current;
+    // version 2 adds MotionSample.ra/rb/rg (rotationRate) and userAgent.
+    // version 1 rows (ids 1-8) lack both; replays must tolerate their absence.
     const data = JSON.stringify({
-      version: 1,
+      version: 2,
       startedAt: startedAtRef.current,
       endedAt: new Date().toISOString(),
+      userAgent: navigator.userAgent,
       motion: motionRef.current,
       orientation: orientationRef.current,
     });
