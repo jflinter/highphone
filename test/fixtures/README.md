@@ -120,6 +120,64 @@ Capture **14** ("5-6 foot throw, very spinny") scores nothing, but its
 flight fakes the landing spike and ends the throw at the 23-frame minimum. It
 needs a different fix from bugs 1 and 2.
 
+## Which fix works: two paths, measured
+
+Both paths were evaluated against the verdicts in `expectations.ts`, scored as
+"correct captures kept" out of 45 and "bugs fixed" out of 21.
+
+| approach | kept | fixed | notes |
+| --- | --- | --- | --- |
+| frozen detector | 45 | 0 | baseline |
+| best of 1,536 constant tunings | 45 | 15 | **posts a 6.3ft score for capture 37**, where the phone never left the hand |
+| `lib/freefallDetect.ts` prototype | 43 | 17 | no new false positives; all 4 misses explained below |
+
+**Tuning the constants gets surprisingly far but cannot finish.** The best
+config (`threshold 8, entry -2, avg -8, window 40, trim 15`) silences every
+wind-up phantom and lands the whole overhand series on its field notes. But it
+turns capture 37 from a harmless sub-gate phantom into a real leaderboard
+score, never recovers captures 7 and 8, and quietly moves readings that were
+right (capture 3: 1.6 → 2.7ft, capture 6: 19.7 → 25.8ft). `window: 40` also
+works mostly by making any flight under 667ms impossible, which is a floor, not
+an understanding. Treat 15/21 with suspicion: that is 1,536 configs fitted
+against 66 binary outcomes.
+
+**Changing the input signal does better and is not fitted.** The prototype
+reads 1983ms on capture 55 against the video-measured 2030ms (−2.3%), and puts
+captures 65, 66 and 68 inside their bands from 20.3ft, 23.2ft and 1.7ft.
+
+Its four failures are not four problems:
+
+- Captures **3, 6, 7 and 8 are version 1** and carry no `rotationRate`, so
+  spinny flights get no centrifugal allowance. Live devices always report it,
+  so this limits what those eight fixtures can prove, not the approach.
+  Captures 7 and 8 do contain the flight: their traces reach a minimum
+  `|accelerationIncludingGravity|` of 0.08 and 0.19 across ~2.9s and ~3.1s
+  stretches, which is 33.8ft and 39.5ft — matching the thrower's account of
+  them as genuine 30+ footers.
+- Capture **21** misses its band by 0.1ft, and **61** reads 10.1ft against a
+  "short" note.
+
+### Two things this data cannot settle
+
+1. **Nothing above ~2.0s of hang time is validated.** Capture 55 is the only
+   externally measured throw, and the longest flight the prototype detects is
+   2.4s. The 30+ footers that would exercise the top of the range are exactly
+   the version 1 captures. A handful of new video-measured high throws would
+   close this.
+2. **The 3.5s ring buffer in `pages/index.tsx` is too small for a 30+ footer.**
+   A 3.1s flight plus the 0.5s landing confirm needs 3.6s, so anything above
+   roughly 3.0s airborne (~36ft) gets truncated. Raising `windowSizeSeconds`
+   costs nothing, but no capture in this set is long enough to demonstrate it.
+
+### A structural bug that stops mattering
+
+`pages/index.tsx` wiping its buffers on any detection *before* the height gate
+is a genuine bug — with the frozen detector, consuming only the window a
+detection used rescues captures 71 and 72. But it also lets the capture 37 fake
+post a 4.4ft score, because the frozen detector cannot tell the two apart. With
+the prototype the question disappears: it produces no phantoms, so wipe-all and
+consume score identically. Fix detection and this stops being a decision.
+
 ## Adding more captures
 
 Record with `/capture`, then:

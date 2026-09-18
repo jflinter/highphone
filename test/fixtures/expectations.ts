@@ -140,14 +140,14 @@ export const expectations: Expectation[] = [
   {
     id: 7,
     status: 'bug',
-    want: { record: true, detections: 1, heightFt: [8, 200] },
-    why: 'An "extremely high" throw that scores NOTHING. A wind-up phantom fires at sample 488 (0.6ft), wipes the buffer, and the real throw never recovers — it fires a second 0.6ft phantom and stops. This is the headline user-visible bug.',
+    want: { record: true, detections: 1, heightFt: [20, 60] },
+    why: 'An "extremely high" throw that scores NOTHING. A wind-up phantom fires at sample 488 (0.6ft), wipes the buffer, and the real throw never recovers — it fires a second 0.6ft phantom and stops. This is the headline user-visible bug. Ground truth for the band: the thrower confirms these were the highest throws ever put through the capture tool, legitimately 30+ feet, and the trace agrees — it reaches a minimum |accelerationIncludingGravity| of 0.08 (near-perfect free fall) across a ~2.9s stretch, which is 33.8ft.',
   },
   {
     id: 8,
     status: 'bug',
-    want: { record: true, detections: 1, heightFt: [8, 200] },
-    why: 'A "very very high" throw that scores NOTHING. Same two-phantom pattern as 7 (0.6ft then 1.0ft, both under the gate).',
+    want: { record: true, detections: 1, heightFt: [20, 60] },
+    why: 'A "very very high" throw that scores NOTHING. Same two-phantom pattern as 7 (0.6ft then 1.0ft, both under the gate). Also confirmed by the thrower as a genuine 30+ footer; its trace bottoms out at |a| = 0.19 across ~3.1s, which is 39.5ft.',
   },
   {
     id: 9,

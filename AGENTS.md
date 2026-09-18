@@ -55,6 +55,10 @@ The 72 captured traces proved two real bugs. They are written up in full in
 
 `rotationRate` (`ra/rb/rg`, captured but never fed to the detector) is the
 signal that could separate "spinning" from "accelerating".
+`lib/freefallDetect.ts` is a **prototype** that does exactly that — it is scored
+against the same captures in `test/freefallDetect.test.ts` and beats the best
+possible tuning of the frozen constants. It is deliberately NOT wired into the
+game; swapping it in is a separate, deliberate decision.
 
 **This does not unfreeze the code.** The rule below still applies: ask first.
 What has changed is that a fix can now be *verified* instead of guessed at.
@@ -147,6 +151,7 @@ a shadowban. Nothing is blocked at name entry and no data is scrubbed.
 | `migrations/*.sql` | D1 schema: `0001_init.sql` (scores), `0002_capture_sessions.sql` (capture fixtures). |
 | `test/replayCapture.ts` | Replays a captured trace through the game's exact sensor pipeline. Mirrors `pages/index.tsx`'s listener — keep them in sync. |
 | `test/fixtures/` | 72 real captured gestures, their per-capture verdicts (`expectations.ts`), and the bug write-up (`README.md`). |
+| `lib/freefallDetect.ts` | Prototype detector built on free fall + `rotationRate`. Not wired into the game. |
 | `next.config.js` | Enables static export. |
 
 ## Development
