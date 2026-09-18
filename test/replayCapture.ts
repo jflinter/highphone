@@ -4,7 +4,7 @@
 // This is the bridge that finally makes the frozen detector testable: the
 // fixtures in ./fixtures/captures are raw `devicemotion` + `deviceorientation`
 // streams recorded off a real iPhone, and this file feeds them to
-// `handleMotionRosettaCode` + `detectThrow` the same way the live game does —
+// `verticalAcceleration` + `detectThrow` the same way the live game does —
 // same rounding, same two 210-sample ring buffers, same "first detection
 // wins" rule, same `totalHeight > 1.5` recording gate.
 //
@@ -13,7 +13,7 @@
 
 import {
   detectThrow,
-  handleMotionRosettaCode,
+  verticalAcceleration,
   type Orientation,
   type Throw,
   type Vec3,
@@ -111,8 +111,7 @@ export const zAccelFor = (sample: MotionSample): number => {
     accelerationIncludingGravity[1] - acceleration[1],
     accelerationIncludingGravity[2] - acceleration[2],
   ];
-  const rotated = handleMotionRosettaCode(acceleration, gravityVector);
-  return rotated[2] * -1;
+  return verticalAcceleration(acceleration, gravityVector);
 };
 
 export const replayCapture = (capture: Capture): ReplayResult => {

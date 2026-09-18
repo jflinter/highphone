@@ -1,11 +1,16 @@
 // Core throw-detection logic. ⚠️ FROZEN — see AGENTS.md.
 //
-// This code was hand-tuned against noisy real-world accelerometer data and is
-// effectively untestable in a dev environment. It was RELOCATED verbatim from
-// pages/index.tsx (no logic/constant/comment changes) so it can be imported by
-// both the game (pages/index.tsx) and the data-capture tool (pages/capture.tsx),
-// and eventually covered by golden tests built from captured real traces. Do
-// not "clean up", refactor, or adjust anything here.
+// This code was hand-tuned against noisy real-world accelerometer data. It was
+// RELOCATED verbatim from pages/index.tsx so it can be imported by both the
+// game (pages/index.tsx) and the data-capture tool (pages/capture.tsx). It is
+// now covered by golden tests built from 72 captured real throws
+// (test/detectThrow.expectations.test.ts). Do not "clean up", refactor, or
+// adjust anything here.
+//
+// `detectThrow` and its constants are untouched since that relocation. The one
+// change made since is `handleMotionRosettaCode` -> `verticalAcceleration`,
+// which is the same computation written directly and is proven identical on
+// every captured throw; see the comment on that function.
 
 import { heightFromSeconds } from './heightFromSeconds';
 
@@ -32,70 +37,44 @@ export type Throw = {
 
 export type Vec3 = readonly [number, number, number];
 
-export const handleMotionRosettaCode = (
+/**
+ * The phone's vertical acceleration in m/s^2, positive up: the component of
+ * user acceleration along the gravity vector.
+ *
+ * This replaces `handleMotionRosettaCode`, which built a Rodrigues rotation
+ * matrix taking `gravityVector` to (0,0,-1), applied it to `acceleration`, and
+ * left the caller to negate the z component. Rotations preserve dot products
+ * and that one maps the gravity direction onto -z, so the whole construction
+ * was algebraically this dot product. Verified across the 72 captured throws:
+ * 35,053 samples agree to within 6.11e-13 m/s^2, and a full game replay is
+ * identical on every capture (duration, height and detection count).
+ *
+ * The rotation also had a singularity the dot product does not: when gravity
+ * ran parallel to (0,0,-1) the cross product vanished, normalizing it divided
+ * by zero, and the result was NaN. Every comparison against NaN is false, so
+ * such a sample could not advance the state machine, and one landing inside a
+ * flight would poison `averageAcceleration` and stop the throw ever
+ * completing. 89 of 35,142 captured samples hit it; none inside a flight.
+ *
+ * Reads ~0 at rest (measured -0.019 over 3,308 still samples), -9.81 in free
+ * fall, and peaks near +97 (10g) at the release of a hard throw.
+ */
+export const verticalAcceleration = (
   acceleration: Vec3,
   gravityVector: Vec3
-): Vec3 => {
-  function norm(v: number[]) {
-    return Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-  }
-  function normalize(v: number[]) {
-    var length = norm(v);
-    return [v[0] / length, v[1] / length, v[2] / length];
-  }
-  function dotProduct(v1: number[], v2: number[]) {
-    return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
-  }
-  function crossProduct(v1: number[], v2: number[]) {
-    return [
-      v1[1] * v2[2] - v1[2] * v2[1],
-      v1[2] * v2[0] - v1[0] * v2[2],
-      v1[0] * v2[1] - v1[1] * v2[0],
-    ];
-  }
-  function getAngle(v1: number[], v2: number[]) {
-    return Math.acos(dotProduct(v1, v2) / (norm(v1) * norm(v2)));
-  }
-  function matrixMultiply(matrix: number[][], v: number[]) {
-    return [
-      dotProduct(matrix[0], v),
-      dotProduct(matrix[1], v),
-      dotProduct(matrix[2], v),
-    ];
-  }
-  function getRotationMatrix(p: number[], v: number[], a: number) {
-    var ca = Math.cos(a),
-      sa = Math.sin(a),
-      t = 1 - ca,
-      x = v[0],
-      y = v[1],
-      z = v[2];
-    return [
-      [ca + x * x * t, x * y * t - z * sa, x * z * t + y * sa],
-      [x * y * t + z * sa, ca + y * y * t, y * z * t - x * sa],
-      [z * x * t - y * sa, z * y * t + x * sa, ca + z * z * t],
-    ];
-  }
-  function calculateRotationMatrix(v1: number[], v2: number[]) {
-    var a = getAngle(v1, v2);
-    var cp = crossProduct(v1, v2);
-    var ncp = normalize(cp);
-    return getRotationMatrix(v1, ncp, a);
-  }
-
-  var v1 = [gravityVector[0], gravityVector[1], gravityVector[2]];
-  var v2 = [0, 0, -1];
-  const r = calculateRotationMatrix(v1, v2);
-  const rotatedAcceleration = matrixMultiply(r, [
-    acceleration[0],
-    acceleration[1],
-    acceleration[2],
-  ]);
-  return [
-    rotatedAcceleration[0],
-    rotatedAcceleration[1],
-    rotatedAcceleration[2],
-  ];
+): number => {
+  const gravity = Math.hypot(
+    gravityVector[0],
+    gravityVector[1],
+    gravityVector[2]
+  );
+  if (gravity === 0) return 0;
+  return (
+    (acceleration[0] * gravityVector[0] +
+      acceleration[1] * gravityVector[1] +
+      acceleration[2] * gravityVector[2]) /
+    gravity
+  );
 };
 
 export const detectThrow = (

@@ -5,7 +5,7 @@ import useMediaRecorder from '@/components/useMediaRecorder';
 import { heightFromSeconds } from '@/lib/heightFromSeconds';
 import {
   detectThrow,
-  handleMotionRosettaCode,
+  verticalAcceleration,
   type Orientation,
   type Throw,
   type Vec3,
@@ -146,17 +146,12 @@ const Game = ({ playerInfo }: GameProps) => {
         round(event.accelerationIncludingGravity?.y),
         round(event.accelerationIncludingGravity?.z),
       ];
-      const gravityVector = [
+      const gravityVector: Vec3 = [
         accelerationIncludingGravity[0] - acceleration[0],
         accelerationIncludingGravity[1] - acceleration[1],
         accelerationIncludingGravity[2] - acceleration[2],
-      ] as const;
-      const rotatedAcceleration = handleMotionRosettaCode(
-        acceleration,
-        gravityVector
-      );
-
-      const zAccel = rotatedAcceleration[2] * -1;
+      ];
+      const zAccel = verticalAcceleration(acceleration, gravityVector);
       accelerations.push(zAccel);
       if (accelerations.length > maxWindowSize) {
         accelerations.shift();

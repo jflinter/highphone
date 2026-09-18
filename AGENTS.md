@@ -67,9 +67,14 @@ What has changed is that a fix can now be *verified* instead of guessed at.
 
 - **`lib/detectThrow.ts`** (relocated verbatim from `pages/index.tsx` so both the
   game and the `/capture` tool can import it — the *logic is unchanged*)
-  - `handleMotionRosettaCode()` — rotates raw acceleration into a world frame
-    using the gravity vector so "up" is consistent regardless of phone
-    orientation.
+  - `verticalAcceleration()` — the phone's vertical acceleration, positive up:
+    the component of raw acceleration along the gravity vector, so "up" is
+    consistent regardless of phone orientation. Replaced
+    `handleMotionRosettaCode()`, which computed the same number the long way
+    round (a Rodrigues rotation taking gravity to `(0,0,-1)`, then negating z)
+    and returned `NaN` whenever gravity happened to be parallel to `(0,0,-1)`.
+    Proven identical on all 72 captured throws before the swap — see the
+    comment on the function and the math audit in `test/fixtures/README.md`.
   - `detectThrow()` — the state machine (`waiting → accelerating → in_flight →
     complete`) that recognizes a throw and computes its airborne duration. Every
     constant here matters: `threshold = 8`, the `< -3` and `< -5` checks, the
@@ -136,7 +141,7 @@ a shadowban. Nothing is blocked at name entry and no data is scrubbed.
 | File | Role |
 | --- | --- |
 | `pages/index.tsx` | Name entry (`Welcome`) and the game + sensor loop (`Game`). Imports the frozen detector from `lib/detectThrow.ts`. |
-| `lib/detectThrow.ts` | Frozen detection logic: `detectThrow` + `handleMotionRosettaCode` (+ `Orientation`/`Throw`/`Vec3` types). |
+| `lib/detectThrow.ts` | Frozen detection logic: `detectThrow` + `verticalAcceleration` (+ `Orientation`/`Throw`/`Vec3` types). |
 | `pages/capture.tsx` | Private (`/capture`, noindex, unlinked) tool to record raw sensor traces + notes as detector fixtures. |
 | `pages/fame.tsx`, `components/Fame.tsx` | Leaderboard UI. |
 | `pages/hi.tsx`, `components/Info.tsx` | "About / contact" page (noindexed). |

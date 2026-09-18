@@ -184,13 +184,15 @@ Everything between the raw sensor events and a reported height was checked
 against the 72 captures (35,142 motion samples). Results, so nobody has to
 redo it:
 
-**The 60 lines of rotation matrix are a dot product.** `handleMotionRosettaCode`
-builds a Rodrigues rotation taking the gravity vector to `(0,0,-1)`, applies it
-to the acceleration, and the caller negates the z component. Rotations preserve
-dot products, so that whole pipeline is exactly `dot(acceleration, ĝ)` where
-`ĝ` is the normalised gravity vector. Verified numerically: worst disagreement
-over 35,053 samples is 6.1e-13 m/s². AGENTS.md lists "the gravity-rotation
-math" among the constants that matter; it is a one-liner wearing a disguise.
+**The 60 lines of rotation matrix were a dot product. (Now fixed.)**
+`handleMotionRosettaCode` built a Rodrigues rotation taking the gravity vector
+to `(0,0,-1)`, applied it to the acceleration, and left the caller to negate
+the z component. Rotations preserve dot products, so that whole pipeline was
+exactly `dot(acceleration, ĝ)` where `ĝ` is the normalised gravity vector.
+Verified numerically: worst disagreement over 35,053 samples was 6.1e-13 m/s²,
+and a full game replay was identical on all 72 captures. It has since been
+replaced by `verticalAcceleration` in `lib/detectThrow.ts`; the
+characterization snapshot did not move by a single digit.
 
 **`zAccel` is vertical acceleration, positive up, in m/s².** Measured, not
 assumed: 3,308 genuinely still samples average **-0.019** (expect 0), free fall
@@ -205,16 +207,16 @@ with `t = T/2` and `v₀ = gt` reduces to `h = gT²/8`, the standard result, and
 `v₀ = gT/2` is the launch speed. Unit conversions check out. Using g = 9.8
 rather than 9.80665 is a 0.07% error, far below everything else here.
 
-**There is a real singularity, and it has not bitten yet.** When the gravity
-vector is parallel to `(0,0,-1)` — phone flat — the cross product is zero,
-`normalize` divides by zero, and the rotation matrix comes out `NaN`. Every
-comparison against `NaN` is false, so such a sample cannot trigger a state
-change, and one landing inside a flight window would poison
-`averageAcceleration` and stop the throw completing. **89 of 35,142 samples
-(0.25%) are affected**, 77 of them in capture 46. None of them land inside a
-flight, so no capture in this set is broken by it — but it is a live defect,
-not a theoretical one. The dot-product form has no singularity at all, which is
-one more reason to prefer it.
+**There was a real singularity, and it had not bitten yet. (Now fixed.)** When
+the gravity vector ran parallel to `(0,0,-1)` — phone flat — the cross product
+was zero, `normalize` divided by zero, and the rotation matrix came out `NaN`.
+Every comparison against `NaN` is false, so such a sample could not trigger a
+state change, and one landing inside a flight window would have poisoned
+`averageAcceleration` and stopped the throw completing. **89 of 35,142 samples
+(0.25%) hit it**, 77 of them in capture 46. None landed inside a flight, so no
+capture in this set was broken by it — but it was a live defect, not a
+theoretical one. `verticalAcceleration` has no singularity, which is what
+retired it.
 
 **Two things that look wrong and are not.** `detectThrow` slices the
 `orientations` buffer with indices computed from the `accelerations` buffer,

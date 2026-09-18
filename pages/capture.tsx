@@ -15,7 +15,7 @@ import { useRouter } from 'next/router';
 import IPhoneOnly from '@/components/IPhoneOnly';
 import {
   detectThrow,
-  handleMotionRosettaCode,
+  verticalAcceleration,
   type Orientation,
   type Throw,
   type Vec3,
@@ -235,11 +235,7 @@ function Capture() {
         accelerationIncludingGravity[1] - acceleration[1],
         accelerationIncludingGravity[2] - acceleration[2],
       ];
-      const rotatedAcceleration = handleMotionRosettaCode(
-        acceleration,
-        gravityVector
-      );
-      const zAccel = rotatedAcceleration[2] * -1;
+      const zAccel = verticalAcceleration(acceleration, gravityVector);
       accelBufRef.current.push(zAccel);
       if (accelBufRef.current.length > maxWindowSize) {
         accelBufRef.current.shift();
