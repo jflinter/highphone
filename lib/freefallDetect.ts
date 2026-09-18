@@ -47,6 +47,17 @@ export const FREEFALL_BASE = 3;
  * against the capture set at 0.05 — 5cm, which is about the distance from an
  * iPhone's accelerometer to the middle of the handset. The value being
  * physically what it should be is the reason to trust it.
+ *
+ * KNOWN LIMITATION: the allowance is unbounded, and the captures reach 100
+ * rad/s (16 rev/s), where it works out to 512 m/s^2. On 9% of samples it
+ * exceeds 9.81, meaning a perfectly still phone would pass the free-fall test
+ * on those samples. No capture in the set actually produces a false positive
+ * from this, and capping the allowance measurably HURTS (capping at 9.81 drops
+ * the score from 43/17 to 39/14) because fast-spinning throws genuinely do
+ * read large accelerations in free fall. The reason it holds in practice is
+ * physical rather than designed: you cannot spin a phone at 16 rev/s while
+ * still holding it, so a high `w` is itself evidence the phone is airborne.
+ * Worth revisiting if a false positive ever shows up here.
  */
 export const FREEFALL_SPIN_COEFF = 0.05;
 

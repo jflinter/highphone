@@ -178,6 +178,56 @@ post a 4.4ft score, because the frozen detector cannot tell the two apart. With
 the prototype the question disappears: it produces no phantoms, so wipe-all and
 consume score identically. Fix detection and this stops being a decision.
 
+## Math audit
+
+Everything between the raw sensor events and a reported height was checked
+against the 72 captures (35,142 motion samples). Results, so nobody has to
+redo it:
+
+**The 60 lines of rotation matrix are a dot product.** `handleMotionRosettaCode`
+builds a Rodrigues rotation taking the gravity vector to `(0,0,-1)`, applies it
+to the acceleration, and the caller negates the z component. Rotations preserve
+dot products, so that whole pipeline is exactly `dot(acceleration, ĝ)` where
+`ĝ` is the normalised gravity vector. Verified numerically: worst disagreement
+over 35,053 samples is 6.1e-13 m/s². AGENTS.md lists "the gravity-rotation
+math" among the constants that matter; it is a one-liner wearing a disguise.
+
+**`zAccel` is vertical acceleration, positive up, in m/s².** Measured, not
+assumed: 3,308 genuinely still samples average **-0.019** (expect 0), free fall
+on capture 55 averages **-9.81**, and the release peaks at **+96.7** (~10g).
+`|gravityVector|` stays in 9.67-9.94 across every sample, mean 9.81. The
+conventions are sound and the detector's constants read sensibly against them:
+`a > 8` is "accelerating upward hard" (the release), `a < -3` is "falling",
+`average < -5` is "that really was free fall".
+
+**`heightFromSeconds` and `speedFromSeconds` are correct.** `h = v₀t - ½gt²`
+with `t = T/2` and `v₀ = gt` reduces to `h = gT²/8`, the standard result, and
+`v₀ = gT/2` is the launch speed. Unit conversions check out. Using g = 9.8
+rather than 9.80665 is a 0.07% error, far below everything else here.
+
+**There is a real singularity, and it has not bitten yet.** When the gravity
+vector is parallel to `(0,0,-1)` — phone flat — the cross product is zero,
+`normalize` divides by zero, and the rotation matrix comes out `NaN`. Every
+comparison against `NaN` is false, so such a sample cannot trigger a state
+change, and one landing inside a flight window would poison
+`averageAcceleration` and stop the throw completing. **89 of 35,142 samples
+(0.25%) are affected**, 77 of them in capture 46. None of them land inside a
+flight, so no capture in this set is broken by it — but it is a live defect,
+not a theoretical one. The dot-product form has no singularity at all, which is
+one more reason to prefer it.
+
+**Two things that look wrong and are not.** `detectThrow` slices the
+`orientations` buffer with indices computed from the `accelerations` buffer,
+even though the two are fed by independent event streams — but the streams stay
+within one sample of each other across all 72 captures (mean skew 0.9, max 1),
+and `totalRotation` only feeds commented-out UI. And the inner `const
+startIndex` inside the `in_flight` branch shadows the outer one, but the return
+happens in a different branch, so the outer value is the one used.
+
+**The prototype is insensitive to the game's rounding.** Scored on raw versus
+1-decimal-rounded input: zero captures change detected/not, and zero
+milliseconds of duration change.
+
 ## Adding more captures
 
 Record with `/capture`, then:
