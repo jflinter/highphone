@@ -31,6 +31,34 @@ rename its variables, adjust its constants, or "fix" things that look like bugs
 way on purpose. If a task seems to *require* touching it, **stop and ask the
 human first**, and never change observable behavior.
 
+### Known detector bugs (documented, still frozen)
+
+The 72 captured traces proved two real bugs. They are written up in full in
+`test/fixtures/README.md`; this is the summary so nobody rediscovers them:
+
+1. **The detector latches onto the wind-up, not the release.** An arm swing
+   produces the same `accel > 8` then `accel < -3` signature as a throw, so the
+   flight clock starts early. The tell is `Throw.maxAcceleration`: a genuine
+   release reads 50-105, every misdetection in the set reads 9-49.
+   - Ten captures report exactly **383ms / 0.6ft** — the 23-frame minimum the
+     `i - inFlightIndex > 22` anti-cheat allows. Because `pages/index.tsx`
+     clears its buffers on *any* detection before applying the `> 1.5` height
+     gate, these phantoms also destroy the throw that follows. Captures 7, 8,
+     71 and 72 are big throws that scored **nothing**.
+   - Captures 35 and 39 are fakes where the phone never left the hand, and the
+     game posted **11.4ft** and **4.0ft**.
+2. **Overhand throws read far too high** — same early latch, but the detector
+   rides through the arm arc and completes at the real landing, so the reading
+   includes the throwing motion. Capture 65 ("~4 ft") reads 20.3ft; capture 66
+   ("(6ft)") reads 23.2ft. Capture 68 is overhand onto cushions and reads 1.7ft
+   against a stated 6ft, so a fix cannot just cap the high side.
+
+`rotationRate` (`ra/rb/rg`, captured but never fed to the detector) is the
+signal that could separate "spinning" from "accelerating".
+
+**This does not unfreeze the code.** The rule below still applies: ask first.
+What has changed is that a fix can now be *verified* instead of guessed at.
+
 ### Exactly which code is "core game logic" (frozen)
 
 - **`lib/detectThrow.ts`** (relocated verbatim from `pages/index.tsx` so both the
@@ -117,6 +145,8 @@ a shadowban. Nothing is blocked at name entry and no data is scrubbed.
 | `worker/index.ts` | Cloudflare Worker: serves static assets + `/api/*` (D1 + R2). |
 | `wrangler.toml` | Worker config (assets dir, D1, R2 bindings). |
 | `migrations/*.sql` | D1 schema: `0001_init.sql` (scores), `0002_capture_sessions.sql` (capture fixtures). |
+| `test/replayCapture.ts` | Replays a captured trace through the game's exact sensor pipeline. Mirrors `pages/index.tsx`'s listener — keep them in sync. |
+| `test/fixtures/` | 72 real captured gestures, their per-capture verdicts (`expectations.ts`), and the bug write-up (`README.md`). |
 | `next.config.js` | Enables static export. |
 
 ## Development
@@ -133,12 +163,25 @@ pnpm lint
 pnpm test      # vitest: characterization tests for the pure functions
 ```
 
-`pnpm test` currently locks `heightFromSeconds`, `speedFromSeconds`, and the
-profanity filter. **`detectThrow` is NOT yet covered.** It now lives (exported)
-in `lib/detectThrow.ts`, so it is finally importable by a test. The remaining
-step is golden tests from captured real acceleration traces — use the `/capture`
-tool to collect them (rows land in the `capture_sessions` D1 table). Do that
-before touching detection.
+`pnpm test` locks `heightFromSeconds`, `speedFromSeconds`, the profanity
+filter, and — as of the 72 captured traces — **`detectThrow` itself**.
+
+`test/fixtures/captures/` holds 72 real gestures recorded with `/capture` and
+pulled from the `capture_sessions` D1 table. `test/replayCapture.ts` feeds them
+through the game's exact listener pipeline, and reproduces the live on-device
+result for all 72. Detection is no longer untestable. **Read
+`test/fixtures/README.md` before touching anything in `lib/detectThrow.ts`.**
+
+Two test files, with different jobs:
+
+- `test/detectThrow.expectations.test.ts` — what we *want*. Real throws the
+  detector gets right and gestures it correctly ignores must stay green. Known
+  bugs are registered with `it.fails`, so they are green *because* they fail
+  today; fixing one turns it **red**, which is the success signal — drop the
+  `.fails` and promote the row in `test/fixtures/expectations.ts`.
+- `test/detectThrow.characterization.test.ts` — what *is*. A snapshot of all 72
+  readings. Expected to go red on any deliberate detection change; read the
+  diff, confirm each line moved as intended, then `pnpm exec vitest run -u`.
 
 For anything touching the API/leaderboard, use `pnpm preview` (real Worker +
 local D1), not `pnpm dev`. D1 can be seeded locally with
