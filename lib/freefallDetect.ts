@@ -20,7 +20,7 @@
 // by the game — gives us w, so we can raise the bar by exactly that much.
 
 import { heightFromSeconds } from './heightFromSeconds';
-import type { Throw } from './detectThrow';
+import { verticalAcceleration, type Throw, type Vec3 } from './detectThrow';
 
 export type FreefallSample = {
   /** event.timeStamp, ms. Used directly — no 60Hz assumption. */
@@ -29,6 +29,10 @@ export type FreefallSample = {
   ax: number;
   ay: number;
   az: number;
+  /** event.acceleration (gravity removed), m/s^2. Only the launch check uses it. */
+  lx: number;
+  ly: number;
+  lz: number;
   /** event.rotationRate, deg/s. Zero if the device does not report it. */
   wx: number;
   wy: number;
@@ -70,7 +74,50 @@ const CONFIRM_SAMPLES = 30;
 /** Shortest flight worth reporting. Below this it is a fumble, not a throw. */
 const MIN_FLIGHT_MS = 250;
 
+/**
+ * Free fall alone cannot tell a throw from a DROP — a phone dropped off a
+ * balcony feels exactly as weightless as one thrown up, and `heightFromSeconds`
+ * would happily credit the fall time as height it never climbed. So a flight
+ * only counts if the phone was accelerated upward hard just before it started.
+ *
+ * Every one of the 51 captures with a real flight peaks at 24.6 m/s^2 or more
+ * in the window below (the gentlest is capture 27, "short throw, caught"), so
+ * 15 leaves better than 60% margin. Note this is NOT the old detector's
+ * `maxAcceleration`, which measured from the wind-up and read as low as 9 on
+ * overhand throws; measured against the start of actual free fall, even those
+ * read 30-52.
+ */
+const LAUNCH_MIN_UP = 15;
+
+/** How far back to look for that upward push. ~0.33s at 60Hz. */
+const LAUNCH_WINDOW = 20;
+
 const DEG_TO_RAD = Math.PI / 180;
+
+/** Vertical acceleration for one sample, positive up. See lib/detectThrow.ts. */
+const upwardAcceleration = (s: FreefallSample): number => {
+  const linear: Vec3 = [s.lx, s.ly, s.lz];
+  const gravity: Vec3 = [s.ax - s.lx, s.ay - s.ly, s.az - s.lz];
+  return verticalAcceleration(linear, gravity);
+};
+
+/**
+ * Was the phone thrown into this flight, rather than simply let go? Looks for
+ * a hard upward push in the samples immediately before free fall began.
+ */
+const wasLaunched = (
+  samples: readonly FreefallSample[],
+  runStart: number
+): boolean => {
+  const from = runStart - LAUNCH_WINDOW;
+  // Not enough history to tell — refuse rather than guess, so a drop can never
+  // sneak through on a buffer that has just been cleared.
+  if (from < 0) return false;
+  for (let i = from; i < runStart; i++) {
+    if (upwardAcceleration(samples[i]) >= LAUNCH_MIN_UP) return true;
+  }
+  return false;
+};
 
 /** Is this sample physically in free fall, allowing for centrifugal spin? */
 export const isFreefall = (s: FreefallSample): boolean => {
@@ -131,7 +178,11 @@ export const detectThrowFreefall = (
     // was long enough to be a throw rather than a fumble or sensor noise.
     if (runStart < 0) continue;
     const durationMs = samples[runEnd].t - samples[runStart].t;
-    if (runEnd - runStart + 1 >= ENTER_SAMPLES && durationMs >= MIN_FLIGHT_MS) {
+    if (
+      runEnd - runStart + 1 >= ENTER_SAMPLES &&
+      durationMs >= MIN_FLIGHT_MS &&
+      wasLaunched(samples, runStart)
+    ) {
       landedStart = runStart;
       landedEnd = runEnd;
       confirm = 0;

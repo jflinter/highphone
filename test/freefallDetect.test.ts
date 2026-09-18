@@ -22,6 +22,9 @@ const runGame = (capture: Capture) => {
       ax: m.gx ?? 0,
       ay: m.gy ?? 0,
       az: m.gz ?? 0,
+      lx: m.ax ?? 0,
+      ly: m.ay ?? 0,
+      lz: m.az ?? 0,
       // version 1 captures (ids 1-8) predate rotationRate, so they get no spin
       // allowance. Live devices always report it; this only limits what those
       // eight fixtures can prove.
@@ -53,6 +56,49 @@ const satisfies = (want: Want, r: ReturnType<typeof runGame>) => {
   }
   return true;
 };
+
+// Synthetic traces for the one case no capture covers: a phone that is simply
+// DROPPED. Free fall alone cannot tell it from a throw — both feel weightless —
+// so the detector has to see the upward push that preceded the flight.
+//
+// Signs follow the real conventions measured off the captures: at rest
+// accelerationIncludingGravity is one g and `acceleration` is zero; in free
+// fall accelerationIncludingGravity is zero and `acceleration` is -1g, which
+// makes verticalAcceleration read -9.81; an upward push adds to both.
+const G = 9.81;
+const held = { ax: 0, ay: 0, az: G, lx: 0, ly: 0, lz: 0, wx: 0, wy: 0, wz: 0 };
+const pushed = { ax: 0, ay: 0, az: G + 30, lx: 0, ly: 0, lz: 30, wx: 0, wy: 0, wz: 0 };
+const falling = { ax: 0, ay: 0, az: 0, lx: 0, ly: 0, lz: -G, wx: 0, wy: 0, wz: 0 };
+
+const trace = (...runs: [typeof held, number][]): FreefallSample[] => {
+  const out: FreefallSample[] = [];
+  for (const [sample, count] of runs)
+    for (let i = 0; i < count; i++) out.push({ ...sample, t: Math.round(out.length * (1000 / 60)) });
+  return out;
+};
+
+describe('freefall detector: throw vs drop', () => {
+  // 90 samples of free fall is 1.48s, which would be credited as ~8.7ft.
+  const dropped = trace([held, 60], [falling, 90], [held, 60]);
+  const thrown = trace([held, 60], [pushed, 10], [falling, 90], [held, 60]);
+
+  it('ignores a phone that was dropped, not thrown', () => {
+    expect(detectThrowFreefall(dropped)).toBeNull();
+  });
+
+  it('accepts the same flight when it was preceded by an upward push', () => {
+    const d = detectThrowFreefall(thrown);
+    expect(d).not.toBeNull();
+    expect(d!.durationMs).toBeGreaterThan(1400);
+    expect(d!.durationMs).toBeLessThan(1550);
+  });
+
+  it('refuses to guess when there is no history before the flight', () => {
+    // A flight starting at the very front of the buffer cannot be verified, so
+    // it is rejected rather than assumed good.
+    expect(detectThrowFreefall(trace([falling, 90], [held, 60]))).toBeNull();
+  });
+});
 
 describe('freefall detector prototype', () => {
   const results = new Map<number, ReturnType<typeof runGame>>();

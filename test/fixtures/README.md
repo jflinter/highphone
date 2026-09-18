@@ -141,6 +141,27 @@ works mostly by making any flight under 667ms impossible, which is a floor, not
 an understanding. Treat 15/21 with suspicion: that is 1,536 configs fitted
 against 66 binary outcomes.
 
+**Free fall alone cannot tell a throw from a drop.** A phone dropped off a
+balcony feels exactly as weightless as one thrown up, and `heightFromSeconds`
+credits the fall time as height it never climbed — a 10m drop reads as 8.2ft.
+The frozen detector is accidentally immune, because it demands `a > 8` (a hard
+upward push) before it starts timing; a pure free-fall test is not. So the
+prototype gates each flight on a hard upward push in the ~0.33s before free
+fall began. Every one of the 51 captures with a real flight peaks at **24.6
+m/s^2 or more** there (the gentlest being capture 27, "short throw, caught"),
+so the 15 m/s^2 gate has better than 60% margin and costs nothing: the score is
+identical with and without it. It is also not the frozen detector's
+`maxAcceleration`, which measured from the wind-up and read as low as 9 on
+overhand throws — measured against the start of actual free fall, those same
+throws read 30-52. No capture in the set is a pure drop, so this path is
+covered by synthetic traces in `test/freefallDetect.test.ts` instead.
+
+This is the same split that fixes the timing. The frozen detector uses one
+signal for two jobs — the upward spike both proves it was a throw AND starts
+the clock — which is why a wind-up that looks like a spike corrupts the
+duration. Separating "was this a throw" (the push) from "how long was it
+airborne" (the free-fall run) fixes both at once.
+
 **Changing the input signal does better and is not fitted.** The prototype
 reads 1983ms on capture 55 against the video-measured 2030ms (−2.3%), and puts
 captures 65, 66 and 68 inside their bands from 20.3ft, 23.2ft and 1.7ft.
