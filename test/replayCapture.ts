@@ -1,5 +1,8 @@
-// Replays a recorded /capture session through the game's exact sensor
-// pipeline (pages/index.tsx `motionListener` / `orientationListener`).
+// Replays a recorded /capture session through a detector.
+//
+// `replayShipped` mirrors what the game runs today (pages/index.tsx).
+// `replayCapture` mirrors the RETIRED `detectThrow` pipeline, kept so the old
+// behaviour stays measurable and the fixtures' history stays readable.
 //
 // This is the bridge that finally makes the frozen detector testable: the
 // fixtures in ./fixtures/captures are raw `devicemotion` + `deviceorientation`
@@ -18,6 +21,10 @@ import {
   type Throw,
   type Vec3,
 } from '../lib/detectThrow';
+import {
+  detectThrowFreefall,
+  type FreefallSample,
+} from '../lib/freefallDetect';
 
 export type MotionSample = {
   t: number;
@@ -173,5 +180,56 @@ export const replayCapture = (capture: Capture): ReplayResult => {
     durationMs: recorded ? recorded.durationMs : null,
     heightFt: recorded ? recorded.totalHeight : null,
     zAccels,
+  };
+};
+
+
+/**
+ * Mirrors the game's CURRENT listener (pages/index.tsx): one buffer of raw
+ * samples, `detectThrowFreefall` on every motion event, buffers cleared on any
+ * detection, first detection over the height gate wins. Keep in sync with it.
+ */
+export const replayShipped = (
+  capture: Capture
+): {
+  detections: Throw[];
+  recorded: Throw | null;
+  durationMs: number | null;
+  heightFt: number | null;
+} => {
+  let samples: FreefallSample[] = [];
+  const detections: Throw[] = [];
+  let recorded: Throw | null = null;
+
+  for (const m of capture.motion) {
+    samples.push({
+      t: m.t,
+      ax: m.gx ?? 0,
+      ay: m.gy ?? 0,
+      az: m.gz ?? 0,
+      lx: m.ax ?? 0,
+      ly: m.ay ?? 0,
+      lz: m.az ?? 0,
+      // version 1 fixtures (ids 1-8) predate rotationRate, so they replay as if
+      // the phone were not spinning. Live devices always report it.
+      wx: m.ra ?? 0,
+      wy: m.rb ?? 0,
+      wz: m.rg ?? 0,
+    });
+    if (samples.length > maxWindowSize) samples.shift();
+    if (recorded) continue;
+
+    const detected = detectThrowFreefall(samples);
+    if (!detected) continue;
+    detections.push(detected);
+    samples = [];
+    if (detected.totalHeight > MIN_THROW_HEIGHT_FT) recorded = detected;
+  }
+
+  return {
+    detections,
+    recorded,
+    durationMs: recorded ? recorded.durationMs : null,
+    heightFt: recorded ? recorded.totalHeight : null,
   };
 };

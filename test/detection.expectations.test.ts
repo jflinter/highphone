@@ -1,4 +1,4 @@
-// Golden tests for the frozen throw detector, built from 72 real gestures
+// Golden tests for the SHIPPED throw detector, built from 72 real gestures
 // recorded off an iPhone with the /capture tool.
 //
 // Read test/fixtures/README.md first. The short version:
@@ -13,10 +13,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { loadCapture } from './captures';
-import { replayCapture, type ReplayResult } from './replayCapture';
+import { replayShipped } from './replayCapture';
 import { expectations, type Want } from './fixtures/expectations';
 
-const assertWant = (want: Want, result: ReplayResult) => {
+const assertWant = (want: Want, result: ReturnType<typeof replayShipped>) => {
   // Assert the user-visible outcome first, so a failure names the headline
   // problem ("this fake throw posted a score") rather than a detail.
   expect(
@@ -46,29 +46,29 @@ const assertWant = (want: Want, result: ReplayResult) => {
 const byStatus = (status: 'correct' | 'bug' | 'ambiguous') =>
   expectations.filter((e) => e.status === status);
 
-describe('detectThrow: behaviour to preserve (must stay green)', () => {
+describe('detection: behaviour to preserve (must stay green)', () => {
   for (const expectation of byStatus('correct')) {
     const capture = loadCapture(expectation.id);
     it(`#${expectation.id} ${capture.notes}`, () => {
-      assertWant(expectation.want, replayCapture(capture));
+      assertWant(expectation.want, replayShipped(capture));
     });
   }
 });
 
-describe('detectThrow: known bugs (green while broken — fixing one turns it RED)', () => {
+describe('detection: known bugs (green while broken — fixing one turns it RED)', () => {
   for (const expectation of byStatus('bug')) {
     const capture = loadCapture(expectation.id);
     it.fails(`#${expectation.id} ${capture.notes}`, () => {
-      assertWant(expectation.want, replayCapture(capture));
+      assertWant(expectation.want, replayShipped(capture));
     });
   }
 });
 
-describe('detectThrow: ambiguous (documented, not gating)', () => {
+describe('detection: ambiguous (documented, not gating)', () => {
   for (const expectation of byStatus('ambiguous')) {
     const capture = loadCapture(expectation.id);
     it.skip(`#${expectation.id} ${capture.notes}`, () => {
-      assertWant(expectation.want, replayCapture(capture));
+      assertWant(expectation.want, replayShipped(capture));
     });
   }
 });

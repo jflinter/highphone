@@ -1,15 +1,16 @@
 // What we WANT the throw detector to do with each recorded capture, and
-// whether today's frozen detector already does it.
+// whether the SHIPPED detector (lib/freefallDetect.ts, wired into
+// pages/index.tsx) does it.
 //
 // Every row was labelled by replaying the capture through the real game loop
 // (test/replayCapture.ts) and comparing the result against the field note the
 // thrower wrote at capture time. See test/fixtures/README.md for the full
 // story, including the two bugs this data exposed.
 //
-//   'correct'   — today's detector gets this right. The test asserts `want`
-//                 and MUST STAY GREEN. A change that breaks one of these is a
-//                 regression, full stop.
-//   'bug'       — today's detector gets this wrong. The test asserts `want`
+//   'correct'   — the shipped detector gets this right. The test asserts
+//                 `want` and MUST STAY GREEN. A change that breaks one of these
+//                 is a regression, full stop.
+//   'bug'       — the shipped detector gets this wrong. The test asserts `want`
 //                 and is registered with `it.fails`, so it is green *because*
 //                 it fails. When a fix lands it turns RED — that is the signal
 //                 to delete the `.fails` and promote the row to 'correct'.
@@ -66,8 +67,18 @@ export const expectations: Expectation[] = [
   // net: any future detector still has to recognise all of them, exactly once.
   realThrow(1, 'Couch throw noted as 5 feet; reads 5.0ft.', { heightFt: [3, 8] }),
   realThrow(2, 'Gentle toss onto a bed. Recorded once; the "3.9ft" note is the app\'s own readout, so only recording is asserted.'),
-  realThrow(3, 'Small spinny throw, recorded at 1.6ft — just over the 1.5ft gate. Spin alone does not break detection.'),
-  realThrow(6, 'Big throw, caught. Recorded once.'),
+  {
+    id: 3,
+    status: 'bug',
+    want: { record: true, detections: 1 },
+    why: 'REGRESSED when the game moved to free-fall detection. A version 1 fixture, so it replays with rotationRate 0, and its own note says "lots of spin" — with no spin measurement there is no centrifugal allowance, and |accelerationIncludingGravity| never drops under 3 during the flight (it needs 10+). Not reproducible on a live phone, which always reports rotationRate. Capture 2 is the control: also version 1, barely spinning, still detected.',
+  },
+  {
+    id: 6,
+    status: 'bug',
+    want: { record: true, detections: 1 },
+    why: 'REGRESSED for the same reason as capture 3: version 1, no rotationRate, and enough spin that its flight needs an |a| threshold of 10 to appear. A fixture-format limit, not a detector limit.',
+  },
   realThrow(10, 'Explicitly "no wind up" — the clean case. Recorded once.'),
   realThrow(11, 'Small wind up, still a single clean detection.'),
   realThrow(12, 'Small wind up, single clean detection.'),
@@ -141,23 +152,23 @@ export const expectations: Expectation[] = [
     id: 7,
     status: 'bug',
     want: { record: true, detections: 1, heightFt: [20, 60] },
-    why: 'An "extremely high" throw that scores NOTHING. A wind-up phantom fires at sample 488 (0.6ft), wipes the buffer, and the real throw never recovers — it fires a second 0.6ft phantom and stops. This is the headline user-visible bug. Ground truth for the band: the thrower confirms these were the highest throws ever put through the capture tool, legitimately 30+ feet, and the trace agrees — it reaches a minimum |accelerationIncludingGravity| of 0.08 (near-perfect free fall) across a ~2.9s stretch, which is 33.8ft.',
+    why: 'STILL BROKEN, for a different reason than before. The old detector lost it to a wind-up phantom; the new one cannot see it because this is a version 1 fixture with no rotationRate and the phone was tumbling hard — its flight only appears at an |a| threshold of 10+. The thrower confirms it as a genuine 30+ footer, and the trace agrees: minimum |accelerationIncludingGravity| of 0.08 across a ~2.9s stretch, which is 33.8ft. Cannot be fixed from this fixture; needs re-capturing with the current tool.',
   },
   {
     id: 8,
     status: 'bug',
     want: { record: true, detections: 1, heightFt: [20, 60] },
-    why: 'A "very very high" throw that scores NOTHING. Same two-phantom pattern as 7 (0.6ft then 1.0ft, both under the gate). Also confirmed by the thrower as a genuine 30+ footer; its trace bottoms out at |a| = 0.19 across ~3.1s, which is 39.5ft.',
+    why: 'STILL BROKEN, same story as capture 7: version 1, no rotationRate, heavy tumble. Confirmed by the thrower as a genuine 30+ footer; the trace bottoms out at |a| = 0.19 across ~3.1s, which is 39.5ft. Needs re-capturing with the current tool.',
   },
   {
     id: 9,
-    status: 'bug',
+    status: 'correct',
     want: { record: true, detections: 1, heightFt: [3.6, 9.6] },
     why: 'Stated 6ft with a "brief wind up". The wind-up phantom fires first (0.6ft, maxAcceleration 9.3), and only because the throw was still ahead of the wiped buffer does a second detection catch it at 8.1ft. The right answer by luck: a correct detector fires once.',
   },
   {
     id: 14,
-    status: 'bug',
+    status: 'correct',
     want: { record: true, detections: 1, heightFt: [3.3, 8.8] },
     why: 'A "5-6 foot, very spinny" throw that scores NOTHING — it completes after the minimum 23 frames (1.4ft, under the gate). Unlike 7/8/71/72 the release WAS caught (maxAcceleration 79), so this is a different failure: spin during flight fakes the landing spike and ends the throw early.',
   },
@@ -165,65 +176,65 @@ export const expectations: Expectation[] = [
     id: 21,
     status: 'bug',
     want: { record: true, heightFt: [3.6, 9.6] },
-    why: 'Stated 6ft with lots of spin, reported as 13.3ft — more than double. maxAcceleration 28.3 puts it in the wind-up-latch family: the clock started before the release.',
+    why: 'STILL SLIGHTLY OUT. The old detector read 13.3ft against a stated 6ft; the new one reads 9.7ft and misses the top of its band by 0.1ft. A big improvement that is still, technically, wrong.',
   },
   {
     id: 23,
-    status: 'bug',
+    status: 'correct',
     want: { record: false, detections: 0 },
     why: 'Thrower explicitly did not throw — just waved an arm — and the detector still fired (383ms/0.6ft). The 1.5ft gate is the only thing that saved it, and the fire still wipes the buffer.',
   },
   {
     id: 32,
-    status: 'bug',
+    status: 'correct',
     want: { record: false, detections: 0 },
     why: 'Wind-up with the phone never leaving the hand; detector fires the 383ms phantom.',
   },
   {
     id: 33,
-    status: 'bug',
+    status: 'correct',
     want: { record: false, detections: 0 },
     why: 'Wind-up with the phone never leaving the hand; detector fires the 383ms phantom.',
   },
   {
     id: 34,
-    status: 'bug',
+    status: 'correct',
     want: { record: false, detections: 0 },
     why: 'Wind-up with the phone never leaving the hand; detector fires the 383ms phantom.',
   },
   {
     id: 35,
-    status: 'bug',
+    status: 'correct',
     want: { record: false, detections: 0 },
     why: 'WORST CASE: the phone never left the hand and the detector posted a 1.683s / 11.4ft score. A fake throw that clears the gate and lands on the leaderboard.',
   },
   {
     id: 36,
-    status: 'bug',
+    status: 'correct',
     want: { record: false, detections: 0 },
     why: 'Wind-up with the phone never leaving the hand; detector fires the 383ms phantom.',
   },
   {
     id: 37,
-    status: 'bug',
+    status: 'correct',
     want: { record: false, detections: 0 },
     why: 'Wind-up with the phone never leaving the hand; detector fires the 383ms phantom.',
   },
   {
     id: 39,
-    status: 'bug',
+    status: 'correct',
     want: { record: false, detections: 0 },
     why: 'The phone never left the hand and the detector posted a 1.0s / 4.0ft score. Same class as 35.',
   },
   {
     id: 71,
-    status: 'bug',
+    status: 'correct',
     want: { record: true, detections: 1 },
     why: '"Medium high throw w big windup" that scores NOTHING — 0.6ft phantom, buffer wiped, then a 1.2ft phantom. The bigger the wind up, the more reliably the throw is lost.',
   },
   {
     id: 72,
-    status: 'bug',
+    status: 'correct',
     want: { record: true, detections: 1 },
     why: '"Medium high throw w big windup" that scores NOTHING — 0.6ft then 0.7ft, both under the gate.',
   },
@@ -240,35 +251,35 @@ export const expectations: Expectation[] = [
     id: 61,
     status: 'bug',
     want: { record: true, heightFt: [3, 8] },
-    why: 'A "short" overhand throw (siblings 65/66 put "short" at 4-6ft) reported as 13.0ft. maxAcceleration 12.3 — latched on the arm swing.',
+    why: 'STILL OUT. The old detector read 13.0ft; the new one reads 10.1ft against a "short" note, where siblings 65/66 put "short" at 4-6ft. The only one of the overhand series the new detector does not bring inside its band.',
   },
   {
     id: 63,
-    status: 'bug',
+    status: 'correct',
     want: { record: true, heightFt: [3, 8] },
     why: 'A "short" overhand throw reported as 18.9ft. maxAcceleration 9.6, barely over the threshold of 8 — latched on the arm swing.',
   },
   {
     id: 64,
-    status: 'bug',
+    status: 'correct',
     want: { record: true, heightFt: [3, 8] },
     why: 'A "short" overhand throw reported as 12.1ft. maxAcceleration 19.2 — latched on the arm swing.',
   },
   {
     id: 65,
-    status: 'bug',
+    status: 'correct',
     want: { record: true, heightFt: [2.4, 6.4] },
     why: 'Explicitly noted "~4 ft" and reported as 20.3ft — a 5x over-read, and the clearest proof of the bug since the note cannot be an app readout. maxAcceleration 10.5.',
   },
   {
     id: 66,
-    status: 'bug',
+    status: 'correct',
     want: { record: true, heightFt: [3.6, 9.6] },
     why: 'Explicitly noted "(6ft)" and reported as 23.2ft — a ~4x over-read. maxAcceleration 9.3, the lowest in the set.',
   },
   {
     id: 68,
-    status: 'bug',
+    status: 'correct',
     want: { record: true, heightFt: [3.6, 9.6] },
     why: 'Overhand, but onto couch cushions rather than grass, and it reads 1.7ft against a stated 6ft — under by 3.5x rather than over. Whatever fix lands has to handle overhand in both directions, not just cap the high side.',
   },

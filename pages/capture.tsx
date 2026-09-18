@@ -20,6 +20,10 @@ import {
   type Throw,
   type Vec3,
 } from '@/lib/detectThrow';
+import {
+  detectThrowFreefall,
+  type FreefallSample,
+} from '@/lib/freefallDetect';
 import { CaptureSummary, createCapture, fetchCaptures } from '@/lib/api';
 import { useWakeLock } from '@/lib/useWakeLock';
 
@@ -101,6 +105,9 @@ function Capture() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [sampleCount, setSampleCount] = useState(0);
   const [verdict, setVerdict] = useState<Throw | null>(null);
+  // The new detector's verdict, shown alongside the old one so a throw can be
+  // judged against both without leaving the field.
+  const [freefallVerdict, setFreefallVerdict] = useState<Throw | null>(null);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [lastSubmittedId, setLastSubmittedId] = useState<number | null>(null);
@@ -115,6 +122,8 @@ function Capture() {
   const accelBufRef = useRef<number[]>([]);
   const orientBufRef = useRef<Orientation[]>([]);
   const firstDetectionRef = useRef<Throw | null>(null);
+  const freefallBufRef = useRef<FreefallSample[]>([]);
+  const firstFreefallRef = useRef<Throw | null>(null);
   // Live listeners, kept so we can detach them.
   const motionListenerRef = useRef<((e: DeviceMotionEvent) => void) | null>(
     null
@@ -152,6 +161,8 @@ function Capture() {
     accelBufRef.current = [];
     orientBufRef.current = [];
     firstDetectionRef.current = null;
+    freefallBufRef.current = [];
+    firstFreefallRef.current = null;
   };
 
   const requestPermission = async (): Promise<boolean> => {
@@ -245,6 +256,27 @@ function Capture() {
       if (detected && !firstDetectionRef.current) {
         firstDetectionRef.current = detected;
       }
+
+      // The new detector, run in parallel on the same events.
+      freefallBufRef.current.push({
+        t: Math.round(event.timeStamp),
+        ax: event.accelerationIncludingGravity?.x ?? 0,
+        ay: event.accelerationIncludingGravity?.y ?? 0,
+        az: event.accelerationIncludingGravity?.z ?? 0,
+        lx: event.acceleration?.x ?? 0,
+        ly: event.acceleration?.y ?? 0,
+        lz: event.acceleration?.z ?? 0,
+        wx: event.rotationRate?.alpha ?? 0,
+        wy: event.rotationRate?.beta ?? 0,
+        wz: event.rotationRate?.gamma ?? 0,
+      });
+      if (freefallBufRef.current.length > maxWindowSize) {
+        freefallBufRef.current.shift();
+      }
+      const freefallDetected = detectThrowFreefall(freefallBufRef.current);
+      if (freefallDetected && !firstFreefallRef.current) {
+        firstFreefallRef.current = freefallDetected;
+      }
       setSampleCount(motionRef.current.length);
     };
 
@@ -258,6 +290,7 @@ function Capture() {
   const stopCapture = () => {
     detachListeners();
     setVerdict(firstDetectionRef.current);
+    setFreefallVerdict(firstFreefallRef.current);
     setPhase('stopped');
   };
 
@@ -290,6 +323,7 @@ function Capture() {
     setLastSubmittedId(id);
     setNotes('');
     setVerdict(null);
+    setFreefallVerdict(null);
     resetBuffers();
     setSampleCount(0);
     setPhase('idle');
@@ -297,7 +331,7 @@ function Capture() {
   };
 
   // "Would the game have recorded this?" mirrors the game's gate.
-  const renderVerdict = () => {
+  const renderVerdictFor = (verdict: Throw | null) => {
     if (!verdict) {
       return <span className="text-red-600">No throw detected ✕</span>;
     }
@@ -347,7 +381,16 @@ function Capture() {
         )}
         {phase === 'stopped' && (
           <div className="w-full flex flex-col items-center space-y-3">
-            <div className="text-sm">{renderVerdict()}</div>
+            <div className="w-full space-y-1 text-sm">
+              <div>
+                <span className="text-gray-500">shipped: </span>
+                {renderVerdictFor(verdict)}
+              </div>
+              <div>
+                <span className="text-gray-500">freefall: </span>
+                {renderVerdictFor(freefallVerdict)}
+              </div>
+            </div>
             <div className="text-xs text-gray-500">
               {motionRef.current.length} motion / {orientationRef.current.length}{' '}
               orientation samples

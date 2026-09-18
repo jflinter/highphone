@@ -1,4 +1,9 @@
-// One snapshot of what the detector does to all 72 real captures.
+// One snapshot of what the RETIRED `detectThrow` does to all 72 real captures.
+//
+// The game no longer runs this detector — pages/index.tsx uses
+// lib/freefallDetect.ts. It is kept because /capture still runs it side by side
+// for comparison in the field, and because this snapshot is the record of the
+// behaviour the fixtures were originally labelled against.
 //
 // This file makes NO judgement about right or wrong — that is
 // detectThrow.expectations.test.ts. Its job is to make the blast radius of any
@@ -20,7 +25,7 @@ import { replayCapture } from './replayCapture';
 const fixed = (n: number | null, digits: number) =>
   n === null ? null : Number(n.toFixed(digits));
 
-describe('detectThrow characterization', () => {
+describe('retired detectThrow characterization', () => {
   it('replay matches what the phone computed live, for every capture', () => {
     const drift = allCaptureIds().flatMap((id) => {
       const capture = loadCapture(id);

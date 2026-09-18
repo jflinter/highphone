@@ -41,8 +41,9 @@ phone is accelerating", which is the heart of both bugs below.
 
 | File | Job |
 | --- | --- |
-| `../detectThrow.expectations.test.ts` | What we *want*. Correct behaviour must stay green; known bugs are `it.fails` and turn red when fixed. |
-| `../detectThrow.characterization.test.ts` | What *is*. One snapshot of all 72 readings, so any detector change shows its full blast radius in a single diff. |
+| `../detection.expectations.test.ts` | What we *want* from the SHIPPED detector. Correct behaviour must stay green; outstanding captures are `it.fails` and turn red when fixed. |
+| `../freefallDetect.test.ts` | Unit-level behaviour no capture covers — chiefly throw-vs-drop, via synthetic traces. |
+| `../frozenDetector.characterization.test.ts` | What the RETIRED `detectThrow` does. One snapshot of all 72 readings, kept because `/capture` still runs it. |
 
 `expectations.ts` carries the per-capture verdict and the reasoning. Heights in
 field notes are eyeball estimates, so height assertions are generous (about the
@@ -125,11 +126,16 @@ needs a different fix from bugs 1 and 2.
 Both paths were evaluated against the verdicts in `expectations.ts`, scored as
 "correct captures kept" out of 45 and "bugs fixed" out of 21.
 
-| approach | kept | fixed | notes |
-| --- | --- | --- | --- |
-| frozen detector | 45 | 0 | baseline |
-| best of 1,536 constant tunings | 45 | 15 | **posts a 6.3ft score for capture 37**, where the phone never left the hand |
-| `lib/freefallDetect.ts` prototype | 43 | 17 | no new false positives; all 4 misses explained below |
+| approach | verdicts met | notes |
+| --- | --- | --- |
+| retired `detectThrow` | 45 of 66 | baseline |
+| best of 1,536 constant tunings of it | 60 of 66 | **posts a 6.3ft score for capture 37**, where the phone never left the hand |
+| `lib/freefallDetect.ts` (**shipped**) | 60 of 66 | no new false positives; the 6 outstanding are explained below |
+
+Both land on 60, but not the same 60, and not with the same risk: the tuning
+buys its 15 by introducing a fresh false positive and never recovers captures 7
+and 8, while the shipped detector introduces none and its misses are all
+attributable to fixture-format limits or small residual error.
 
 **Tuning the constants gets surprisingly far but cannot finish.** The best
 config (`threshold 8, entry -2, avg -8, window 40, trim 15`) silences every

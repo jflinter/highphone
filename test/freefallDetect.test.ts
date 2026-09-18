@@ -1,9 +1,8 @@
-// Scores the PROTOTYPE detector (lib/freefallDetect.ts) against the same 72
-// captures and the same verdicts the frozen detector is judged by.
+// Unit-level behaviour of the shipped detector (lib/freefallDetect.ts).
 //
-// Nothing here is wired into the game. The point is to answer one question
-// with numbers instead of opinion: does switching input signal beat tuning the
-// frozen detector's constants? See test/fixtures/README.md.
+// Per-capture verdicts live in test/detection.expectations.test.ts; this file
+// covers the things a capture cannot show — chiefly that a DROPPED phone is
+// not a throw, which no recorded gesture in the set exercises.
 
 import { describe, expect, it } from 'vitest';
 import { allCaptureIds, loadCapture } from './captures';
@@ -100,7 +99,7 @@ describe('freefall detector: throw vs drop', () => {
   });
 });
 
-describe('freefall detector prototype', () => {
+describe('freefall detector', () => {
   const results = new Map<number, ReturnType<typeof runGame>>();
   for (const id of allCaptureIds()) results.set(id, runGame(loadCapture(id)));
 
@@ -135,46 +134,4 @@ describe('freefall detector prototype', () => {
     }
   });
 
-  it('scores better on the labelled set than the frozen detector', () => {
-    let kept = 0;
-    let fixed = 0;
-    const missed: string[] = [];
-    for (const e of expectations) {
-      if (e.status === 'ambiguous') continue;
-      const ok = satisfies(e.want, results.get(e.id)!);
-      if (e.status === 'correct' && ok) kept++;
-      else if (e.status === 'bug' && ok) fixed++;
-      else missed.push(`#${e.id} (${e.status})`);
-    }
-    // Frozen: 45 kept / 0 fixed. Best of 1,536 constant-tunings of the frozen
-    // detector: 45 kept / 15 fixed, and that config posts a 6.3ft score for
-    // capture 37, where the phone never left the hand.
-    expect({ kept, fixed, missed }).toMatchInlineSnapshot(`
-      {
-        "fixed": 17,
-        "kept": 43,
-        "missed": [
-          "#3 (correct)",
-          "#6 (correct)",
-          "#7 (bug)",
-          "#8 (bug)",
-          "#21 (bug)",
-          "#61 (bug)",
-        ],
-      }
-    `);
-  });
-
-  it('only fails on captures that lack rotationRate, plus two near misses', () => {
-    // 3, 6, 7 and 8 are version 1 fixtures with no gyro, so spinny flights get
-    // no centrifugal allowance and read as not-free-fall. Live devices always
-    // report rotationRate; this is a limit of those eight fixtures, not of the
-    // approach. 21 misses its band by 0.1ft and 61 reads 10.1ft against a
-    // "short" note.
-    for (const id of [3, 6, 7, 8]) {
-      expect(loadCapture(id).version, `#${id}`).toBe(1);
-    }
-    expect(results.get(21)!.recorded!.totalHeight).toBeCloseTo(9.7, 0);
-    expect(results.get(61)!.recorded!.totalHeight).toBeCloseTo(10.1, 0);
-  });
 });

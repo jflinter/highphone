@@ -3,13 +3,11 @@ import { Switch } from '@/components/Switch';
 import Confetti from 'react-confetti';
 import useMediaRecorder from '@/components/useMediaRecorder';
 import { heightFromSeconds } from '@/lib/heightFromSeconds';
+import { type Throw } from '@/lib/detectThrow';
 import {
-  detectThrow,
-  verticalAcceleration,
-  type Orientation,
-  type Throw,
-  type Vec3,
-} from '@/lib/detectThrow';
+  detectThrowFreefall,
+  type FreefallSample,
+} from '@/lib/freefallDetect';
 import {
   LeaderboardEntry,
   createScore,
@@ -48,9 +46,6 @@ const requestMotionPermissions = async () => {
   }
   return false;
 };
-
-const round = (float: number | null | undefined) =>
-  Number((float ?? 0).toFixed(1));
 
 type ButtonProps = {
   text: string;
@@ -120,47 +115,30 @@ const Game = ({ playerInfo }: GameProps) => {
   }, [lastThrow, videoBlob]);
 
   useEffect(() => {
-    let accelerations: number[] = [];
-    let orientations: Orientation[] = [];
-    const orientationEventsPerSecond = 60;
+    let samples: FreefallSample[] = [];
+    const motionEventsPerSecond = 60;
     const windowSizeSeconds = 3.5; // enough for a 50 foot throw, plus a .5s buffer at the end
-    const maxWindowSize = orientationEventsPerSecond * windowSizeSeconds;
-    const orientationListener = (event: DeviceOrientationEvent) => {
-      orientations.push({
-        alpha: event.alpha ?? 0,
-        beta: event.beta ?? 0,
-        gamma: event.gamma ?? 0,
-      });
-      if (orientations.length > maxWindowSize) {
-        orientations.shift();
-      }
-    };
+    const maxWindowSize = motionEventsPerSecond * windowSizeSeconds;
     const motionListener = (event: DeviceMotionEvent) => {
-      const acceleration: Vec3 = [
-        round(event.acceleration?.x),
-        round(event.acceleration?.y),
-        round(event.acceleration?.z),
-      ];
-      const accelerationIncludingGravity: Vec3 = [
-        round(event.accelerationIncludingGravity?.x),
-        round(event.accelerationIncludingGravity?.y),
-        round(event.accelerationIncludingGravity?.z),
-      ];
-      const gravityVector: Vec3 = [
-        accelerationIncludingGravity[0] - acceleration[0],
-        accelerationIncludingGravity[1] - acceleration[1],
-        accelerationIncludingGravity[2] - acceleration[2],
-      ];
-      const zAccel = verticalAcceleration(acceleration, gravityVector);
-      accelerations.push(zAccel);
-      if (accelerations.length > maxWindowSize) {
-        accelerations.shift();
+      samples.push({
+        t: event.timeStamp,
+        ax: event.accelerationIncludingGravity?.x ?? 0,
+        ay: event.accelerationIncludingGravity?.y ?? 0,
+        az: event.accelerationIncludingGravity?.z ?? 0,
+        lx: event.acceleration?.x ?? 0,
+        ly: event.acceleration?.y ?? 0,
+        lz: event.acceleration?.z ?? 0,
+        wx: event.rotationRate?.alpha ?? 0,
+        wy: event.rotationRate?.beta ?? 0,
+        wz: event.rotationRate?.gamma ?? 0,
+      });
+      if (samples.length > maxWindowSize) {
+        samples.shift();
       }
 
-      let detectedThrow = detectThrow(accelerations, orientations);
+      const detectedThrow = detectThrowFreefall(samples);
       if (detectedThrow && !lastThrow) {
-        accelerations = [];
-        orientations = [];
+        samples = [];
         chunksRef.current = [];
         if (detectedThrow.totalHeight > 1.5) {
           setLastThrow(detectedThrow);
@@ -180,7 +158,6 @@ const Game = ({ playerInfo }: GameProps) => {
     const timeout = setTimeout(() => {
       requestMotionPermissions().then((result) => {
         if (result) {
-          window.addEventListener('deviceorientation', orientationListener);
           window.addEventListener('devicemotion', motionListener);
         }
       });
@@ -188,8 +165,7 @@ const Game = ({ playerInfo }: GameProps) => {
 
     return () => {
       clearTimeout(timeout);
-      accelerations = [];
-      orientations = [];
+      samples = [];
       chunksRef.current = [];
     };
   }, []);

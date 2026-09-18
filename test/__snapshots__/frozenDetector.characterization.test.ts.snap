@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`detectThrow characterization > produces a stable reading for every recorded gesture 1`] = `
+exports[`retired detectThrow characterization > produces a stable reading for every recorded gesture 1`] = `
 [
   {
     "durationMs": 1117,

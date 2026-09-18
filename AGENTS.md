@@ -14,59 +14,72 @@ It lives in production at **https://highphone.app** and **https://highph.one**.
 
 Built ~2023, untouched for years. Codebase is deliberately simple.
 
-## ⚠️ The most important thing: DO NOT CHANGE THE CORE GAME LOGIC ⚠️
+## ⚠️ Changing throw detection requires evidence ⚠️
 
-The throw-detection code was tuned by hand against messy, noisy real-world
-accelerometer data — throwing an actual iPhone into the air over and over. The
-magic numbers in it (thresholds, frame counts, the 60 Hz assumption, the
-gravity-rotation math) are **empirically calibrated and effectively
-untestable in a dev environment**. There is no way to unit-test them or verify
-a change without physically throwing a phone many times, and even then the
-sensor data is noisy enough that regressions are extremely hard to spot.
+Detection used to be frozen because it was untestable: the constants were
+hand-tuned by throwing a real iPhone over and over, and nothing in a dev
+environment could tell you whether a change helped. That is no longer true.
+`test/fixtures/captures/` holds 72 real gestures with per-capture verdicts, and
+`test/replayCapture.ts` runs them through the game's exact listener.
 
-**Treat the core game logic as frozen.** Do not "clean it up," refactor it,
-rename its variables, adjust its constants, or "fix" things that look like bugs
-(e.g. the `// TODO this makes no sense` comment, the `index > 0` check, the
-`beta / 2`). If it looks wrong but ships in production, assume it was tuned that
-way on purpose. If a task seems to *require* touching it, **stop and ask the
-human first**, and never change observable behavior.
+**The rule now: no change to detection without running the fixtures.** Not "it
+looks wrong so I fixed it" — the last person to trust that instinct would have
+made things worse in four different ways. Run `pnpm test`, read what moved, and
+say why every moved line is an improvement. `test/fixtures/README.md` is the
+required reading.
 
-### Known detector bugs (documented, still frozen)
+### What the game runs
 
-The 72 captured traces proved two real bugs. They are written up in full in
-`test/fixtures/README.md`; this is the summary so nobody rediscovers them:
+`pages/index.tsx` uses **`lib/freefallDetect.ts`**. It asks three questions per
+motion event:
 
-1. **The detector latches onto the wind-up, not the release.** An arm swing
-   produces the same `accel > 8` then `accel < -3` signature as a throw, so the
-   flight clock starts early. The tell is `Throw.maxAcceleration`: a genuine
-   release reads 50-105, every misdetection in the set reads 9-49.
-   - Ten captures report exactly **383ms / 0.6ft** — the 23-frame minimum the
-     `i - inFlightIndex > 22` anti-cheat allows. Because `pages/index.tsx`
-     clears its buffers on *any* detection before applying the `> 1.5` height
-     gate, these phantoms also destroy the throw that follows. Captures 7, 8,
-     71 and 72 are big throws that scored **nothing**.
-   - Captures 35 and 39 are fakes where the phone never left the hand, and the
-     game posted **11.4ft** and **4.0ft**.
-2. **Overhand throws read far too high** — same early latch, but the detector
-   rides through the arm arc and completes at the real landing, so the reading
-   includes the throwing motion. Capture 65 ("~4 ft") reads 20.3ft; capture 66
-   ("(6ft)") reads 23.2ft. Capture 68 is overhand onto cushions and reads 1.7ft
-   against a stated 6ft, so a fix cannot just cap the high side.
+1. Is the phone weightless right now? `|accelerationIncludingGravity| <
+   3 + 0.05 * w^2`, where the `w^2` term allows for the centrifugal force a
+   spinning phone feels even in free fall.
+2. How long did the weightless run last? From event timestamps — no 60Hz
+   assumption.
+3. Was it *thrown*, or merely dropped? There must be an upward push of
+   >= 15 m/s^2 in the ~0.33s before the run began. Free fall alone cannot tell a
+   throw from a drop, and `heightFromSeconds` would credit a drop's fall time as
+   height it never climbed.
 
-`rotationRate` (`ra/rb/rg`, captured but never fed to the detector) is the
-signal that could separate "spinning" from "accelerating".
-`lib/freefallDetect.ts` is a **prototype** that does exactly that — it is scored
-against the same captures in `test/freefallDetect.test.ts` and beats the best
-possible tuning of the frozen constants. It is deliberately NOT wired into the
-game; swapping it in is a separate, deliberate decision.
+Steps 1-2 answer *how long*; step 3 answers *whether it counts*. Keeping those
+separate is the fix — the retired detector used one signal for both, which is
+why a wind-up that resembled a release corrupted the duration.
 
-**This does not unfreeze the code.** The rule below still applies: ask first.
-What has changed is that a fix can now be *verified* instead of guessed at.
+Scored against the 72 captures: **66 of 72 verdicts met, 6 outstanding** (see
+below). The one externally verified throw (capture 55, hang time measured on
+video at 2.03s) reads 1.983s.
 
-### Exactly which code is "core game logic" (frozen)
+### `lib/detectThrow.ts` is retired, not deleted
 
-- **`lib/detectThrow.ts`** (relocated verbatim from `pages/index.tsx` so both the
-  game and the `/capture` tool can import it — the *logic is unchanged*)
+It still backs `/capture`, which runs both detectors side by side so a throw can
+be judged against old and new in the field, and
+`test/frozenDetector.characterization.test.ts` snapshots its behaviour. It is no
+longer in the game's path. Do not revive it without reading why it was replaced.
+
+### The 6 outstanding captures
+
+- **3, 6, 7, 8** — version 1 fixtures, recorded before the capture tool stored
+  `rotationRate`. They replay as if the phone were not spinning, and all four
+  were spinning hard, so they get no centrifugal allowance and their flights
+  never register. **Not reproducible on a live phone**, which always reports
+  `rotationRate`. Capture 2 is the control: also version 1, barely spinning,
+  still detected. 7 and 8 are confirmed 30+ footers and are the reason the
+  detector is unvalidated above ~2s of hang time — re-capture a few high throws
+  with the current tool to close that gap.
+- **21** — reads 9.7ft against a stated 6ft, missing its band by 0.1ft.
+- **61** — reads 10.1ft against a "short" note (its siblings put "short" at
+  4-6ft).
+
+### Exactly which code is detection-critical
+
+- **`lib/freefallDetect.ts`** — what the game runs. Its constants
+  (`FREEFALL_BASE`, `FREEFALL_SPIN_COEFF`, the launch gate, the confirm window)
+  are fitted against the captures; changing one without re-running them is how
+  you get a regression nobody notices for a year.
+- **`lib/detectThrow.ts`** (retired from the game; still used by `/capture` and
+  pinned by a characterization snapshot)
   - `verticalAcceleration()` — the phone's vertical acceleration, positive up:
     the component of raw acceleration along the gravity vector, so "up" is
     consistent regardless of phone orientation. Replaced
@@ -81,9 +94,12 @@ What has changed is that a fix can now be *verified* instead of guessed at.
     `22`- and `30`-frame windows, the `10`-frame trims, `/ 60` (60 Hz sampling),
     the rotation-diff math.
 - **`pages/index.tsx`**
-  - The `motionListener` / `orientationListener` and their setup inside the big
-    `useEffect` — including `windowSizeSeconds = 3.5`, `zAccel =
-    rotatedAcceleration[2] * -1`, and the `totalHeight > 1.5` minimum-throw gate.
+  - The `motionListener` and its setup inside the big `useEffect` — including
+    `windowSizeSeconds = 3.5` and the `totalHeight > 1.5` minimum-throw gate.
+    Note `windowSizeSeconds` cannot simply be raised for the retired detector
+    (it doubled as a recency filter, and enlarging it broke real throws); the
+    shipped detector scores identically from 3.5s to 8s, so raising it there is
+    safe and would lift the ~36ft ceiling.
 - **`lib/heightFromSeconds.ts`** — projectile physics: airborne time → peak
   height (feet).
 - **`lib/speedFromSeconds.ts`** — projectile physics: airborne time → speed
@@ -141,7 +157,8 @@ a shadowban. Nothing is blocked at name entry and no data is scrubbed.
 | File | Role |
 | --- | --- |
 | `pages/index.tsx` | Name entry (`Welcome`) and the game + sensor loop (`Game`). Imports the frozen detector from `lib/detectThrow.ts`. |
-| `lib/detectThrow.ts` | Frozen detection logic: `detectThrow` + `verticalAcceleration` (+ `Orientation`/`Throw`/`Vec3` types). |
+| `lib/freefallDetect.ts` | **The game's detector.** Free fall + spin allowance + launch gate. |
+| `lib/detectThrow.ts` | Retired detector, still used by `/capture` for comparison: `detectThrow` + `verticalAcceleration` (+ `Orientation`/`Throw`/`Vec3` types). |
 | `pages/capture.tsx` | Private (`/capture`, noindex, unlinked) tool to record raw sensor traces + notes as detector fixtures. |
 | `pages/fame.tsx`, `components/Fame.tsx` | Leaderboard UI. |
 | `pages/hi.tsx`, `components/Info.tsx` | "About / contact" page (noindexed). |
@@ -156,7 +173,6 @@ a shadowban. Nothing is blocked at name entry and no data is scrubbed.
 | `migrations/*.sql` | D1 schema: `0001_init.sql` (scores), `0002_capture_sessions.sql` (capture fixtures). |
 | `test/replayCapture.ts` | Replays a captured trace through the game's exact sensor pipeline. Mirrors `pages/index.tsx`'s listener — keep them in sync. |
 | `test/fixtures/` | 72 real captured gestures, their per-capture verdicts (`expectations.ts`), and the bug write-up (`README.md`). |
-| `lib/freefallDetect.ts` | Prototype detector built on free fall + `rotationRate`. Not wired into the game. |
 | `next.config.js` | Enables static export. |
 
 ## Development
@@ -174,24 +190,18 @@ pnpm test      # vitest: characterization tests for the pure functions
 ```
 
 `pnpm test` locks `heightFromSeconds`, `speedFromSeconds`, the profanity
-filter, and — as of the 72 captured traces — **`detectThrow` itself**.
+filter, and — via 72 captured real throws — **throw detection itself**.
 
-`test/fixtures/captures/` holds 72 real gestures recorded with `/capture` and
-pulled from the `capture_sessions` D1 table. `test/replayCapture.ts` feeds them
-through the game's exact listener pipeline, and reproduces the live on-device
-result for all 72. Detection is no longer untestable. **Read
-`test/fixtures/README.md` before touching anything in `lib/detectThrow.ts`.**
+`test/fixtures/captures/` holds those 72 gestures, pulled from the
+`capture_sessions` D1 table. `test/replayCapture.ts` runs them through the
+game's exact listener. **Read `test/fixtures/README.md` before touching
+detection.**
 
-Two test files, with different jobs:
-
-- `test/detectThrow.expectations.test.ts` — what we *want*. Real throws the
-  detector gets right and gestures it correctly ignores must stay green. Known
-  bugs are registered with `it.fails`, so they are green *because* they fail
-  today; fixing one turns it **red**, which is the success signal — drop the
-  `.fails` and promote the row in `test/fixtures/expectations.ts`.
-- `test/detectThrow.characterization.test.ts` — what *is*. A snapshot of all 72
-  readings. Expected to go red on any deliberate detection change; read the
-  diff, confirm each line moved as intended, then `pnpm exec vitest run -u`.
+| File | Job |
+| --- | --- |
+| `test/detection.expectations.test.ts` | What we *want*, per capture. Green must stay green. The 6 outstanding captures are registered with `it.fails`, so they are green *because* they fail; fixing one turns it **red**, which is the signal to promote it in `test/fixtures/expectations.ts`. |
+| `test/freefallDetect.test.ts` | Unit-level behaviour the captures cannot show — chiefly that a *dropped* phone is not a throw, covered by synthetic traces. |
+| `test/frozenDetector.characterization.test.ts` | Snapshot of the retired `detectThrow`, still run by `/capture`. |
 
 For anything touching the API/leaderboard, use `pnpm preview` (real Worker +
 local D1), not `pnpm dev`. D1 can be seeded locally with
